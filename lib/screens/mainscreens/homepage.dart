@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:poultry_app/screens/mainscreens/live_monitoring_page.dart';
 import 'package:poultry_app/screens/mainscreens/ESP32CameraStreamPage.dart';
 import '../../Responsive_helper.dart';
+import 'package:poultry_app/screens/mainscreens/automation_settings_screen.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -270,6 +271,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         'icon': Icons.shopping_bag,
         'gradient': [const Color(0xFFfa709a), const Color(0xFFfee140)],
         'onPressed': () => NextScreen(context, Editorderedproduct()),
+      });
+      buttons.add({
+        'text': "Automation Settings",
+        'icon': Icons.settings,
+        'gradient': [
+          const Color.fromARGB(255, 8, 224, 55),
+          const Color(0xFFfee140)
+        ],
+        'onPressed': () => NextScreen(context, const AutomationSettings()),
       });
       // NEW: Live Monitoring button
       buttons.add({
