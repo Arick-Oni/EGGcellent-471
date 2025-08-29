@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "599759290685",
+    "firebase_url": "https://esp32-e0a40-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "esp32-e0a40",
+    "storage_bucket": "esp32-e0a40.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:599759290685:android:43a7328da62f05e5bbc554",
+        "android_client_info": {
+          "package_name": "com.example.poultry_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7xsjqsSFEFdMNddxIbSF77UXoGGhwDzE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

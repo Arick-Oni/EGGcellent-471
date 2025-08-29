@@ -1,0 +1,2 @@
+E:/Flutter Projects/Clients Project/poultry_app_zip/poultry_app_zip/poultry_app/android/app/.cxx/Debug/2872v715/x86/CMakeFiles/edit_cache.dir
+E:/Flutter Projects/Clients Project/poultry_app_zip/poultry_app_zip/poultry_app/android/app/.cxx/Debug/2872v715/x86/CMakeFiles/rebuild_cache.dir
