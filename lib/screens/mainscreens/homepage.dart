@@ -4,6 +4,7 @@ import 'package:poultry_app/newAuth/order/trackorder.dart';
 import 'package:poultry_app/screens/mainscreens/filter.dart';
 import 'package:poultry_app/screens/mainscreens/manual_controls_page.dart';
 import 'package:poultry_app/screens/mainscreens/postad.dart';
+import 'package:poultry_app/screens/mainscreens/threshold_config_screen.dart';
 import 'package:poultry_app/screens/mainscreens/todayrate.dart';
 import 'package:poultry_app/utils/constants.dart';
 import 'package:poultry_app/widgets/generalappbar.dart';
@@ -276,8 +277,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         'text': "Automation Settings",
         'icon': Icons.settings,
         'gradient': [
-          const Color.fromARGB(255, 8, 224, 55),
-          const Color(0xFFfee140)
+          const Color.fromARGB(255, 236, 19, 3),
+          const Color.fromARGB(255, 228, 126, 42)
         ],
         'onPressed': () => NextScreen(context, const AutomationSettings()),
       });
@@ -287,6 +288,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         'icon': Icons.monitor_heart, // or Icons.sensors
         'gradient': [const Color(0xFF00b09b), const Color(0xFF96c93d)],
         'onPressed': () => NextScreen(context, const LiveMonitoringPage()),
+      });
+      buttons.add({
+        'text': "Threshold Config",
+        'icon': Icons.tune,
+        'gradient': [
+          const Color.fromARGB(255, 42, 1, 88),
+          const Color.fromARGB(255, 102, 4, 194)
+        ],
+        'onPressed': () => NextScreen(context, const ThresholdConfigScreen()),
       });
       buttons.add({
         'text': "Manual Control",
