@@ -13,6 +13,7 @@ import 'package:poultry_app/screens/mainscreens/live_monitoring_page.dart';
 import 'package:poultry_app/screens/mainscreens/ESP32CameraStreamPage.dart';
 import '../../Responsive_helper.dart';
 import 'package:poultry_app/screens/mainscreens/automation_settings_screen.dart';
+import 'package:poultry_app/screens/mainscreens/threshold_config_screen.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -694,6 +695,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           const Color(0xFFfee140)
         ],
         'onPressed': () => NextScreen(context, const AutomationSettings()),
+      });
+      buttons.add({
+        'text': "Threshold Config",
+        'icon': Icons.tune,
+        'gradient': [
+          const Color.fromARGB(255, 42, 1, 88),
+          const Color.fromARGB(255, 102, 4, 194)
+        ],
+        'onPressed': () => NextScreen(context, const ThresholdConfigScreen()),
       });
       buttons.add({
         'text': "Live Monitoring",

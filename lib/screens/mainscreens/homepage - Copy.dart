@@ -14,6 +14,7 @@ import 'package:poultry_app/screens/mainscreens/live_monitoring_page.dart';
 import 'package:poultry_app/screens/mainscreens/ESP32CameraStreamPage.dart';
 import '../../Responsive_helper.dart';
 import 'package:poultry_app/screens/mainscreens/automation_settings_screen.dart';
+import 'package:poultry_app/screens/mainscreens/threshold_config_screen.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -281,6 +282,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ],
         'onPressed': () => NextScreen(context, const AutomationSettings()),
       });
+
       // NEW: Live Monitoring button
       buttons.add({
         'text': "Live Monitoring",
