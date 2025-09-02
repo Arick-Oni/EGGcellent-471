@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart'; 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:poultry_app/screens/mainscreens/todayrate.dart';
+import 'package:poultry_app/screens/models/todays_rate_model.dart';
 import 'package:poultry_app/screens/start/splash.dart';
 
 Future<void> main() async {
@@ -30,6 +32,7 @@ Future<void> main() async {
     print('Firebase initialization failed: $e');
   }
 
+  //await insertDefaultRates();
   runApp(const MyApp());
 }
 
@@ -46,6 +49,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
       ),
       home: const SplashScreen(),
+      //home: const TodayRatePage(),
     );
   }
 }
