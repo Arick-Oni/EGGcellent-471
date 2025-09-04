@@ -1,0 +1,46 @@
+# Misc
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+*.iml
+
+# IntelliJ / Android Studio
+.idea/
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-configuration
+.melos_tool/
+
+# Android
+local.properties
+.gradle/
+**/GeneratedPluginRegistrant.java
+
+# iOS/macOS
+ios/Flutter/.last_build_id
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/ServiceDefinitions.json
+macos/Flutter/ephemeral/
+
+# Windows
+windows/flutter/ephemeral/
+
+# Linux
+linux/flutter/ephemeral/
+
+# Web
+web/.dart_tool/
