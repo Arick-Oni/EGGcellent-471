@@ -5,6 +5,19 @@ import 'package:poultry_app/screens/mainscreens/todayrate.dart';
 import 'package:poultry_app/screens/models/todays_rate_model.dart';
 import 'package:poultry_app/screens/start/splash.dart';
 
+// Wallet / History pages (old features)
+import 'package:poultry_app/payments/pages/wallet_page.dart';
+import 'package:poultry_app/payments/pages/transaction_history_page.dart';
+import 'package:poultry_app/payments/pages/order_history_page.dart';
+
+// Rewards & Games pages
+import 'package:poultry_app/rewards/games/spin_wheel_page.dart';
+import 'package:poultry_app/rewards/games/quiz_page.dart';
+import 'package:poultry_app/rewards/games/scratch_page.dart';
+import 'package:poultry_app/rewards/pages/quests_page.dart';
+import 'package:poultry_app/rewards/pages/leaderboard_page.dart';
+import 'package:poultry_app/rewards/games/snake_game_page.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   print('Initializing Firebase...');
@@ -43,13 +56,31 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Flutter Demo',
+      title: 'EGGcellent 471',
       theme: ThemeData(
         brightness: Brightness.dark,
         primarySwatch: Colors.blue,
       ),
       home: const SplashScreen(),
       //home: const TodayRatePage(),
+      routes: {
+        // legacy/payment routes
+        '/wallet': (_) => const WalletPage(),
+        '/transactions': (_) => const TransactionHistoryPage(),
+        '/orders': (_) => const OrderHistoryPage(),
+        // rewards menu destinations
+        '/spin': (_) => const SpinWheelPage(),
+        '/quiz': (_) => const QuizPage(),
+        '/scratch': (_) => const ScratchPage(),
+        '/quests': (_) => const QuestsPage(),
+        '/leaderboard': (_) => const LeaderboardPage(),
+        '/snake': (_) => const SnakeGamePage(),
+      },
+      onUnknownRoute: (_) => MaterialPageRoute(
+        builder: (_) => const Scaffold(
+          body: Center(child: Text('Route not found')),
+        ),
+      ),
     );
   }
 }
