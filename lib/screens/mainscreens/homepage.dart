@@ -14,7 +14,13 @@ import 'package:poultry_app/screens/mainscreens/live_monitoring_page.dart';
 import 'package:poultry_app/screens/mainscreens/ESP32CameraStreamPage.dart';
 import '../../Responsive_helper.dart';
 import 'package:poultry_app/screens/mainscreens/automation_settings_screen.dart';
-import 'package:poultry_app/screens/mainscreens/threshold_config_screen.dart';
+
+// Arik
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'package:poultry_app/rewards/widgets/rewards_badge.dart';
+import 'package:poultry_app/screens/mainscreens/games_hub_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -273,6 +279,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                               ),
                                             ],
                                           ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        // Add rewards badge here
+                                        FutureBuilder<User?>(
+                                          future: FirebaseAuth.instance
+                                              .authStateChanges()
+                                              .first,
+                                          builder: (context, snapshot) {
+                                            if (snapshot.hasData &&
+                                                snapshot.data != null) {
+                                              return RewardsBadge(
+                                                  uid: snapshot.data!.uid);
+                                            }
+                                            return const SizedBox.shrink();
+                                          },
                                         ),
                                       ],
                                     ),
@@ -712,15 +733,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         'gradient': [const Color(0xFF00b09b), const Color(0xFF96c93d)],
         'onPressed': () => NextScreen(context, const LiveMonitoringPage()),
       });
-      buttons.add({
-        'text': "Threshold Config",
-        'icon': Icons.tune,
-        'gradient': [
-          const Color.fromARGB(255, 42, 1, 88),
-          const Color.fromARGB(255, 102, 4, 194)
-        ],
-        'onPressed': () => NextScreen(context, const ThresholdConfigScreen()),
-      });
+
       buttons.add({
         'text': "Manual Control",
         'icon': Icons.touch_app_rounded,
@@ -738,6 +751,40 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         'onPressed': () => NextScreen(context, const ESP32CameraStreamPage()),
       });
     }
+
+    // Add new buttons for all users
+    buttons.addAll([
+      {
+        'text': 'Transactions',
+        'icon': Icons.receipt_long_rounded,
+        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'onPressed': () => Navigator.pushNamed(context, '/transactions'),
+      },
+      {
+        'text': 'Add Money',
+        'icon': Icons.add_card_rounded,
+        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'onPressed': () => Navigator.pushNamed(context, '/wallet'),
+      },
+      {
+        'text': 'Leaderboard',
+        'icon': Icons.leaderboard_outlined,
+        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'onPressed': () => Navigator.pushNamed(context, '/leaderboard'),
+      },
+      {
+        'text': 'Games',
+        'icon': Icons.sports_esports_outlined,
+        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'onPressed': () => NextScreen(context, const GamesHubPage()),
+      },
+      {
+        'text': 'Orders',
+        'icon': Icons.local_mall_outlined,
+        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'onPressed': () => Navigator.pushNamed(context, '/orders'),
+      },
+    ]);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1278,6 +1325,49 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Live rewards points badge next to the title
+class RewardsPointsBadge extends StatelessWidget {
+  final String uid;
+  const RewardsPointsBadge({super.key, required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    final doc = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('rewardsSummary')
+        .doc('summary');
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: doc.snapshots(),
+      builder: (context, snap) {
+        final pts = (snap.data?.data()?['totalPoints'] as num?)?.toInt() ?? 0;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.greenAccent.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.greenAccent.withOpacity(0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.emoji_events_rounded,
+                  size: 16, color: Colors.greenAccent),
+              const SizedBox(width: 6),
+              Text(
+                '$pts pts',
+                style: const TextStyle(
+                    color: Colors.greenAccent, fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
