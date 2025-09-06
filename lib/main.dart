@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:poultry_app/screens/services/notification_service.dart';
 import 'package:poultry_app/screens/start/splash.dart';
 
 // Wallet / History pages (old features)
@@ -75,6 +76,13 @@ class MyApp extends StatelessWidget {
         '/leaderboard': (_) => const LeaderboardPage(),
         '/snake': (_) => const SnakeGamePage(),
         '/games': (_) => const GamesHubPage(),
+      },
+      builder: (context, child) {
+        // Initialize notification service after MaterialApp context is available
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          NotificationService().initialize(context);
+        });
+        return child!;
       },
       onUnknownRoute: (_) => MaterialPageRoute(
         builder: (_) => const Scaffold(

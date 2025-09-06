@@ -741,8 +741,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           const Color.fromARGB(255, 97, 176, 0),
           const Color(0xFF96c93d)
         ],
-        'onPressed': () =>
-            NextScreen(context, ManualControlsPage(selectedCoop: 'coop1')),
+        'onPressed': () => NextScreen(context, const ManualControlsPage()),
       });
       buttons.add({
         'text': "Camera Stream",

@@ -13,23 +13,50 @@ class LiveMonitoringPage extends StatefulWidget {
 class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Coop selection
-  String selectedCoop = 'coop1'; // Default coop
-  List<String> availableCoops = ['coop1', 'coop2', 'coop3']; // Example coops
+  // Device selection (matching your ESP8266 setup)
+  String selectedDevice = 'eggcellent360'; // Default device
+  List<String> availableDevices = ['eggcellent360']; // Your ESP8266 device
 
-  // Realtime data
-  Map<String, dynamic> environmentData = {
+  // Realtime data from ESP8266
+  Map<String, dynamic> currentSensors = {
     'temperature': 0.0,
     'humidity': 0.0,
-    'light': 0,
-    'gas': 0,
-    'ammonia': 0.0,
+    'gas_level': 0,
+    'light_level': 0,
+    'food_level': 0,
+    'last_update': 0,
+    'data_valid': false,
+    'arduino_data_valid': false,
   };
 
-  Map<String, bool> actuatorsData = {
-    'fan': false,
-    'light': false,
+  Map<String, dynamic> actuatorsData = {
+    'fan1': false,
+    'fan2': false,
+    'exhaust_fan': false,
+    'lights': false,
+    'water_pump': false,
     'feeder': false,
+    'watering_active': false,
+    'auto_mode': true,
+  };
+
+  Map<String, dynamic> systemStatus = {
+    'status': 'offline',
+    'uptime': 0,
+    'free_heap': 0,
+    'wifi_rssi': 0,
+    'arduino_connection': false,
+    'last_update': 0,
+  };
+
+  Map<String, dynamic> thresholds = {
+    'temperature': 32.0,
+    'humidity_max': 60.0,
+    'humidity_min': 50.0,
+    'gas_level': 400,
+    'light_level': 300,
+    'food_low': 200,
+    'food_high': 800,
   };
 
   @override
@@ -39,53 +66,94 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   }
 
   void _loadInitialData() {
-    _loadEnvironmentData();
+    _loadCurrentSensors();
     _loadActuatorsData();
+    _loadSystemStatus();
+    _loadThresholds();
   }
 
-  void _loadEnvironmentData() {
-    // Load environment data from Firestore for selected coop
+  void _loadCurrentSensors() {
+    // Load current sensor data from Firestore
     _firestore
-        .collection('coops')
-        .doc(selectedCoop)
-        .collection('environment')
+        .collection(selectedDevice)
+        .doc('current_sensors')
         .snapshots()
         .listen((snapshot) {
-      for (var doc in snapshot.docs) {
+      if (snapshot.exists && snapshot.data() != null) {
         setState(() {
-          environmentData = doc.data();
+          currentSensors = snapshot.data()!;
         });
       }
     });
   }
 
   void _loadActuatorsData() {
-    // Load actuator states from Firestore for selected coop
+    // Load actuator states from Firestore
     _firestore
-        .collection('coops')
-        .doc(selectedCoop)
-        .collection('environment')
-        .where(FieldPath.documentId, isEqualTo: 'actuators')
+        .collection(selectedDevice)
+        .doc('actuators')
         .snapshots()
         .listen((snapshot) {
-      for (var doc in snapshot.docs) {
+      if (snapshot.exists && snapshot.data() != null) {
         setState(() {
-          actuatorsData = {
-            'fan': doc['fan'] ?? false,
-            'light': doc['light'] ?? false,
-            'feeder': doc['feeder'] ?? false,
-          };
+          actuatorsData = snapshot.data()!;
         });
       }
     });
   }
 
-  void _onCoopChanged(String? newValue) {
-    if (newValue != null && newValue != selectedCoop) {
+  void _loadSystemStatus() {
+    // Load system status from Firestore
+    _firestore
+        .collection(selectedDevice)
+        .doc('system_status')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        setState(() {
+          systemStatus = snapshot.data()!;
+        });
+      }
+    });
+  }
+
+  void _loadThresholds() {
+    // Load thresholds from Firestore
+    _firestore
+        .collection(selectedDevice)
+        .doc('thresholds')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        setState(() {
+          thresholds = snapshot.data()!;
+        });
+      }
+    });
+  }
+
+  void _onDeviceChanged(String? newValue) {
+    if (newValue != null && newValue != selectedDevice) {
       setState(() {
-        selectedCoop = newValue;
+        selectedDevice = newValue;
       });
-      _loadInitialData(); // Reload data for the new coop
+      _loadInitialData(); // Reload data for the new device
+    }
+  }
+
+  String _formatLastUpdate(int timestamp) {
+    if (timestamp == 0) return 'Never';
+
+    final lastUpdate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final now = DateTime.now();
+    final difference = now.difference(lastUpdate);
+
+    if (difference.inSeconds < 60) {
+      return '${difference.inSeconds}s ago';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return '${difference.inHours}h ago';
     }
   }
 
@@ -93,9 +161,17 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Live Monitoring Dashboard'),
+        title: const Text('Eggcellent 360 - Live Monitoring'),
         backgroundColor: Colors.teal,
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {});
+            },
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -108,7 +184,7 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Modern Coop Selection Card
+                // Device Selection Card
                 Card(
                   elevation: 4,
                   shape: RoundedRectangleBorder(
@@ -136,78 +212,55 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
-                            Icons.home_work,
+                            Icons.developer_board,
                             color: Colors.teal,
                             size: 24,
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Text(
-                          'Select Coop:',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.teal,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Device: ESP8266',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal,
+                              ),
+                            ),
+                            Text(
+                              'Status: ${systemStatus['status']?.toString().toUpperCase() ?? 'UNKNOWN'}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: systemStatus['status'] == 'online'
+                                    ? Colors.green
+                                    : Colors.red,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.teal.withOpacity(0.3),
-                                width: 1,
+                        const Spacer(),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Last Update:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
                               ),
                             ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: selectedCoop,
-                                onChanged: _onCoopChanged,
-                                isExpanded: true,
-                                icon: const Icon(
-                                  Icons.keyboard_arrow_down,
-                                  color: Colors.teal,
-                                ),
-                                style: const TextStyle(
-                                  color: Colors.teal,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                items: availableCoops
-                                    .map<DropdownMenuItem<String>>((String value) {
-                                  return DropdownMenuItem<String>(
-                                    value: value,
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: BoxDecoration(
-                                            color: Colors.teal,
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          value.toUpperCase(),
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
+                            Text(
+                              _formatLastUpdate(
+                                  currentSensors['last_update'] ?? 0),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
@@ -216,7 +269,7 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
                 const SizedBox(height: 20),
 
                 const Text(
-                  'Realtime Environment Status',
+                  'Realtime Sensor Data',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -236,48 +289,57 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
                     _buildEnvironmentCard(
                       title: 'Temperature',
                       value:
-                          '${environmentData['temperature']?.toStringAsFixed(1) ?? 'N/A'}°C',
+                          '${(currentSensors['temperature'] ?? 0.0).toStringAsFixed(1)}°C',
                       icon: Icons.thermostat,
                       color: Colors.red,
                       status: _getTemperatureStatus(
-                        environmentData['temperature'] ?? 0,
+                        currentSensors['temperature'] ?? 0.0,
                       ),
+                      threshold:
+                          'Max: ${thresholds['temperature']?.toStringAsFixed(1) ?? 'N/A'}°C',
                     ),
                     _buildEnvironmentCard(
                       title: 'Humidity',
                       value:
-                          '${environmentData['humidity']?.toStringAsFixed(1) ?? 'N/A'}%',
+                          '${(currentSensors['humidity'] ?? 0.0).toStringAsFixed(1)}%',
                       icon: Icons.water_drop,
                       color: Colors.blue,
                       status: _getHumidityStatus(
-                        environmentData['humidity'] ?? 0,
+                        currentSensors['humidity'] ?? 0.0,
                       ),
-                    ),
-                    _buildEnvironmentCard(
-                      title: 'Light',
-                      value:
-                          '${environmentData['light']?.toString() ?? 'N/A'} lux',
-                      icon: Icons.wb_sunny,
-                      color: Colors.amber,
-                      status: _getLightStatus(environmentData['light'] ?? 0),
+                      threshold:
+                          '${thresholds['humidity_min']?.toStringAsFixed(0) ?? 'N/A'}-${thresholds['humidity_max']?.toStringAsFixed(0) ?? 'N/A'}%',
                     ),
                     _buildEnvironmentCard(
                       title: 'Gas Level',
                       value:
-                          '${environmentData['gas']?.toString() ?? 'N/A'} ppm',
+                          '${currentSensors['gas_level']?.toString() ?? 'N/A'}',
                       icon: Icons.warning,
                       color: Colors.orange,
-                      status: _getGasStatus(environmentData['gas'] ?? 0),
+                      status: _getGasStatus(currentSensors['gas_level'] ?? 0),
+                      threshold:
+                          'Max: ${thresholds['gas_level']?.toString() ?? 'N/A'}',
                     ),
                     _buildEnvironmentCard(
-                      title: 'Ammonia',
+                      title: 'Light Level',
                       value:
-                          '${environmentData['ammonia']?.toStringAsFixed(1) ?? 'N/A'} ppm',
-                      icon: Icons.air,
-                      color: Colors.purple,
-                      status: _getAmmoniaStatus(
-                        environmentData['ammonia'] ?? 0,
-                      ),
+                          '${currentSensors['light_level']?.toString() ?? 'N/A'}',
+                      icon: Icons.wb_sunny,
+                      color: Colors.amber,
+                      status:
+                          _getLightStatus(currentSensors['light_level'] ?? 0),
+                      threshold:
+                          'Min: ${thresholds['light_level']?.toString() ?? 'N/A'}',
+                    ),
+                    _buildEnvironmentCard(
+                      title: 'Food Level',
+                      value:
+                          '${currentSensors['food_level']?.toString() ?? 'N/A'}',
+                      icon: Icons.restaurant,
+                      color: Colors.green,
+                      status: _getFoodStatus(currentSensors['food_level'] ?? 0),
+                      threshold:
+                          '${thresholds['food_low']?.toString() ?? 'N/A'}-${thresholds['food_high']?.toString() ?? 'N/A'}',
                     ),
                     _buildSystemStatusCard(),
                   ],
@@ -285,9 +347,52 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
 
                 const SizedBox(height: 30),
 
+                // Data Validity Indicators
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Data Sources Status',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildDataSourceRow(
+                          'ESP8266 Sensors',
+                          currentSensors['data_valid'] ?? false,
+                          'Temperature, Humidity, Gas',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildDataSourceRow(
+                          'Arduino Sensors',
+                          currentSensors['arduino_data_valid'] ?? false,
+                          'Light Level, Food Level',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildDataSourceRow(
+                          'Arduino Connection',
+                          systemStatus['arduino_connection'] ?? false,
+                          'Serial Communication',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
                 // System Overview Section
                 const Text(
-                  'System Overview',
+                  'Actuator Control Status',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -307,26 +412,74 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Actuator Status',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Actuator Status',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: actuatorsData['auto_mode'] == true
+                                    ? Colors.green
+                                    : Colors.orange,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                actuatorsData['auto_mode'] == true
+                                    ? 'AUTO MODE'
+                                    : 'MANUAL MODE',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
                         _buildActuatorStatusRow(
-                          'Fan',
-                          actuatorsData['fan'] ?? false,
+                          'Fan 1 (Humidity)',
+                          actuatorsData['fan1'] ?? false,
                           Icons.wind_power,
                           Colors.blue,
                         ),
                         const SizedBox(height: 8),
                         _buildActuatorStatusRow(
-                          'Light',
-                          actuatorsData['light'] ?? false,
+                          'Fan 2 (Temperature)',
+                          actuatorsData['fan2'] ?? false,
+                          Icons.air,
+                          Colors.cyan,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildActuatorStatusRow(
+                          'Exhaust Fan',
+                          actuatorsData['exhaust_fan'] ?? false,
+                          Icons.tornado,
+                          Colors.orange,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildActuatorStatusRow(
+                          'LED Lights (ESP8266)',
+                          actuatorsData['lights'] ?? false,
                           Icons.lightbulb,
                           Colors.yellow,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildActuatorStatusRow(
+                          'Water Pump',
+                          actuatorsData['water_pump'] ?? false,
+                          Icons.water,
+                          Colors.blue,
                         ),
                         const SizedBox(height: 8),
                         _buildActuatorStatusRow(
@@ -335,6 +488,49 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
                           Icons.restaurant,
                           Colors.green,
                         ),
+                        const SizedBox(height: 8),
+                        _buildActuatorStatusRow(
+                          'Watering System',
+                          actuatorsData['watering_active'] ?? false,
+                          Icons.water_drop,
+                          Colors.lightBlue,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // System Info Card
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'System Information',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSystemInfoRow('Uptime',
+                            '${(systemStatus['uptime'] ?? 0) / 1000 / 60}min'),
+                        _buildSystemInfoRow('Free Memory',
+                            '${systemStatus['free_heap'] ?? 0} bytes'),
+                        _buildSystemInfoRow('WiFi Signal',
+                            '${systemStatus['wifi_rssi'] ?? 0} dBm'),
+                        _buildSystemInfoRow(
+                            'Last Update',
+                            _formatLastUpdate(
+                                systemStatus['last_update'] ?? 0)),
                       ],
                     ),
                   ),
@@ -366,10 +562,7 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
                           children: [
                             ElevatedButton.icon(
                               onPressed: () {
-                                NextScreen(
-                                    context,
-                                    ManualControlsPage(
-                                        selectedCoop: selectedCoop));
+                                NextScreen(context, const ManualControlsPage());
                               },
                               icon: const Icon(Icons.settings),
                               label: const Text('Manual Controls'),
@@ -410,6 +603,7 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
     required IconData icon,
     required Color color,
     required String status,
+    required String threshold,
   }) {
     return Card(
       elevation: 4,
@@ -427,11 +621,12 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 32, color: color),
+            Icon(icon, size: 28, color: color),
             const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
@@ -440,19 +635,28 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
             ),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: _getStatusColor(status),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 status,
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 9,
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
               ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              threshold,
+              style: TextStyle(
+                fontSize: 8,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -461,6 +665,8 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   }
 
   Widget _buildSystemStatusCard() {
+    bool isOnline = systemStatus['status'] == 'online';
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -469,10 +675,9 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
-            colors: [
-              Colors.green.withOpacity(0.1),
-              Colors.green.withOpacity(0.2),
-            ],
+            colors: isOnline
+                ? [Colors.green.withOpacity(0.1), Colors.green.withOpacity(0.2)]
+                : [Colors.red.withOpacity(0.1), Colors.red.withOpacity(0.2)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -480,28 +685,32 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle, size: 32, color: Colors.green),
+            Icon(
+              isOnline ? Icons.check_circle : Icons.error,
+              size: 28,
+              color: isOnline ? Colors.green : Colors.red,
+            ),
             const SizedBox(height: 8),
             const Text(
               'System',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Online',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Text(
+              isOnline ? 'Online' : 'Offline',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(12),
+                color: isOnline ? Colors.green : Colors.red,
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text(
-                'Healthy',
-                style: TextStyle(
-                  fontSize: 10,
+              child: Text(
+                isOnline ? 'Healthy' : 'Offline',
+                style: const TextStyle(
+                  fontSize: 9,
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
@@ -521,12 +730,16 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   ) {
     return Row(
       children: [
-        Icon(icon, color: isActive ? color : Colors.grey),
+        Icon(icon, color: isActive ? color : Colors.grey, size: 20),
         const SizedBox(width: 8),
-        Text(name, style: const TextStyle(fontSize: 16)),
-        const Spacer(),
+        Expanded(
+          child: Text(
+            name,
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: isActive ? color : Colors.grey,
             borderRadius: BorderRadius.circular(12),
@@ -536,11 +749,77 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontSize: 11,
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDataSourceRow(String name, bool isActive, String description) {
+    return Row(
+      children: [
+        Icon(
+          isActive ? Icons.check_circle : Icons.error,
+          color: isActive ? Colors.green : Colors.red,
+          size: 20,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: isActive ? Colors.green : Colors.red,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            isActive ? 'ACTIVE' : 'INACTIVE',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 10,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSystemInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
     );
   }
 
@@ -555,6 +834,8 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
         return Colors.orange;
       case 'critical':
       case 'poor':
+      case 'low':
+      case 'high':
         return Colors.red;
       default:
         return Colors.grey;
@@ -562,32 +843,47 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   }
 
   String _getTemperatureStatus(double temp) {
-    if (temp < 18) return 'Cold';
-    if (temp > 30) return 'Hot';
+    double threshold = thresholds['temperature'] ?? 32.0;
+    if (temp < threshold - 5) return 'Low';
+    if (temp > threshold + 3) return 'Critical';
+    if (temp > threshold) return 'High';
     return 'Optimal';
   }
 
   String _getHumidityStatus(double humidity) {
-    if (humidity < 30) return 'Low';
-    if (humidity > 70) return 'High';
-    return 'Good';
+    double minThreshold = thresholds['humidity_min'] ?? 50.0;
+    double maxThreshold = thresholds['humidity_max'] ?? 60.0;
+
+    if (humidity < minThreshold - 10) return 'Critical';
+    if (humidity < minThreshold) return 'Low';
+    if (humidity > maxThreshold + 10) return 'Critical';
+    if (humidity > maxThreshold) return 'High';
+    return 'Optimal';
   }
 
   String _getLightStatus(int light) {
-    if (light < 100) return 'Dark';
-    if (light > 1000) return 'Bright';
+    int threshold = thresholds['light_level'] ?? 300;
+    if (light < threshold - 100) return 'Poor';
+    if (light < threshold) return 'Low';
+    if (light > threshold + 500) return 'High';
     return 'Good';
   }
 
   String _getGasStatus(int gas) {
-    if (gas > 1000) return 'Critical';
-    if (gas > 500) return 'Warning';
+    int threshold = thresholds['gas_level'] ?? 400;
+    if (gas > threshold + 200) return 'Critical';
+    if (gas > threshold) return 'High';
+    if (gas > threshold - 100) return 'Warning';
     return 'Good';
   }
 
-  String _getAmmoniaStatus(double ammonia) {
-    if (ammonia > 20) return 'Critical';
-    if (ammonia > 10) return 'Warning';
+  String _getFoodStatus(int food) {
+    int lowThreshold = thresholds['food_low'] ?? 200;
+    int highThreshold = thresholds['food_high'] ?? 800;
+
+    if (food < lowThreshold - 50) return 'Critical';
+    if (food < lowThreshold) return 'Low';
+    if (food > highThreshold) return 'High';
     return 'Good';
   }
 }
