@@ -112,10 +112,10 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
               // Header with current readings
               _buildHeaderSection(),
               SizedBox(height: 24),
-              
+
               // Charts Grid
               _buildChartsGrid(),
-              
+
               // Bottom navigation or action buttons
               SizedBox(height: 20),
               _buildActionButtons(context),
@@ -258,7 +258,7 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildChartCard(String title, List<SensorData> data, 
+  Widget _buildChartCard(String title, List<SensorData> data,
       Color color, IconData icon) {
     return Container(
       height: 280,
