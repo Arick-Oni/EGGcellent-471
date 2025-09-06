@@ -712,15 +712,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         'gradient': [const Color(0xFF00b09b), const Color(0xFF96c93d)],
         'onPressed': () => NextScreen(context, const LiveMonitoringPage()),
       });
-      buttons.add({
-        'text': "Threshold Config",
-        'icon': Icons.tune,
-        'gradient': [
-          const Color.fromARGB(255, 42, 1, 88),
-          const Color.fromARGB(255, 102, 4, 194)
-        ],
-        'onPressed': () => NextScreen(context, const ThresholdConfigScreen()),
-      });
+
       buttons.add({
         'text': "Manual Control",
         'icon': Icons.touch_app_rounded,
