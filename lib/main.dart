@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:poultry_app/screens/mainscreens/todayrate.dart';
-import 'package:poultry_app/screens/models/todays_rate_model.dart';
 import 'package:poultry_app/screens/start/splash.dart';
 
 // Wallet / History pages (old features)
@@ -17,6 +15,7 @@ import 'package:poultry_app/rewards/games/scratch_page.dart';
 import 'package:poultry_app/rewards/pages/quests_page.dart';
 import 'package:poultry_app/rewards/pages/leaderboard_page.dart';
 import 'package:poultry_app/rewards/games/snake_game_page.dart';
+import 'package:poultry_app/screens/mainscreens/games_hub_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,7 +57,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'EGGcellent 471',
       theme: ThemeData(
-        brightness: Brightness.dark,
+        brightness: Brightness.light,
         primarySwatch: Colors.blue,
       ),
       home: const SplashScreen(),
@@ -75,6 +74,7 @@ class MyApp extends StatelessWidget {
         '/quests': (_) => const QuestsPage(),
         '/leaderboard': (_) => const LeaderboardPage(),
         '/snake': (_) => const SnakeGamePage(),
+        '/games': (_) => const GamesHubPage(),
       },
       onUnknownRoute: (_) => MaterialPageRoute(
         builder: (_) => const Scaffold(
