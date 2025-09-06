@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:poultry_app/screens/mainscreens/myads.dart';
 import '../widgets/filter_panel.dart';
 
 class Product {
+  final String id;
+  final String farmerid;
   final double price;
   final String name;
   final String type;
@@ -12,6 +15,8 @@ class Product {
   final double? sellerRating;
 
   Product({
+    required this.id,
+    required this.farmerid,
     required this.price,
     required this.name,
     required this.type,
@@ -21,8 +26,10 @@ class Product {
     this.sellerRating,
   });
 
-  factory Product.fromFirestore(Map<String, dynamic> data) {
+  factory Product.fromFirestore(Map data, String docId) {
     return Product(
+      id: docId,
+      farmerid: data['farmerid'] ?? '',
       price: data['price'] is num
           ? (data['price'] as num).toDouble()
           : double.tryParse(data['price'].toString()) ?? 0.0,
@@ -46,47 +53,63 @@ class Product {
 
 class FilterScreen extends StatefulWidget {
   const FilterScreen({super.key});
-
   @override
-  State<FilterScreen> createState() => _FilterScreenState();
+  State createState() => _FilterScreenState();
 }
 
-class _FilterScreenState extends State<FilterScreen> {
+class _FilterScreenState extends State<FilterScreen>
+    with TickerProviderStateMixin {
   final CollectionReference _productsRef =
       FirebaseFirestore.instance.collection('collectionofall');
-
   List<Product> allProducts = [];
   List<Product> filteredProducts = [];
   bool isLoading = true;
   String errorMessage = '';
-
   String searchQuery = '';
   String filterType = '';
   String filterRegion = '';
   String filterCity = '';
   String sortBy = '';
 
-  // Brand Colors for EggCellent (you can tune!)
   final Color mainBgTop = const Color(0xff232526);
   final Color mainBgBottom = const Color(0xff414345);
   final Color cardBg = const Color(0xfffef9ed);
   final Color accent = const Color(0xfff9a825);
 
+  late AnimationController _controller;
+  late List<Animation<Offset>> _slideAnimations;
+  late List<Animation<double>> _fadeAnimations;
+
   @override
   void initState() {
     super.initState();
     _fetchProducts();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
   }
 
-  Future<void> _fetchProducts() async {
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future _fetchProducts() async {
     try {
       final snapshot = await _productsRef.get();
       final loadedProducts = snapshot.docs
-          .map((doc) =>
-              Product.fromFirestore(doc.data() as Map<String, dynamic>))
+          .map((doc) => Product.fromFirestore(doc.data() as Map, doc.id))
           .toList();
+
       setState(() {
         allProducts = loadedProducts;
+        searchQuery = '';
+        filterType = '';
+        filterCity = '';
+        filterRegion = '';
+        sortBy = '';
         _applyFilters();
         isLoading = false;
       });
@@ -98,11 +121,19 @@ class _FilterScreenState extends State<FilterScreen> {
     }
   }
 
-  Future<void> _refreshProducts() async {
+  Future _refreshProducts() async {
     setState(() {
       isLoading = true;
     });
     await _fetchProducts();
+    setState(() {
+      searchQuery = '';
+      filterType = '';
+      filterCity = '';
+      filterRegion = '';
+      sortBy = '';
+      _applyFilters();
+    });
   }
 
   void _applyFilters() {
@@ -116,16 +147,12 @@ class _FilterScreenState extends State<FilterScreen> {
           product.price.toString().contains(searchQuery) ||
           (product.sellerRating?.toString() ?? '').contains(searchQuery) ||
           (product.sellerActivity?.toString() ?? '').contains(searchQuery);
-
       final matchesType = filterType.isEmpty ||
           product.type.toLowerCase() == filterType.toLowerCase();
-
       final matchesRegion = filterRegion.isEmpty ||
           product.region.toLowerCase().contains(filterRegion.toLowerCase());
-
       final matchesCity = filterCity.isEmpty ||
           product.city.toLowerCase().contains(filterCity.toLowerCase());
-
       return matchesSearch && matchesType && matchesRegion && matchesCity;
     }).toList();
 
@@ -138,10 +165,32 @@ class _FilterScreenState extends State<FilterScreen> {
       tempList.sort(
           (a, b) => (b.sellerActivity ?? 0).compareTo(a.sellerActivity ?? 0));
     }
-
     setState(() {
       filteredProducts = tempList;
+      _controller.reset();
+      _controller.forward();
+      _setupAnimations();
     });
+  }
+
+  void _setupAnimations() {
+    _slideAnimations = [];
+    _fadeAnimations = [];
+    final count = filteredProducts.length;
+    final intervalStep = 1.0 / (count == 0 ? 1 : count);
+    for (int i = 0; i < count; i++) {
+      final begin = i * intervalStep;
+      final end = begin + intervalStep;
+      _slideAnimations.add(
+          Tween<Offset>(begin: const Offset(0, 0.35), end: Offset.zero).animate(
+              CurvedAnimation(
+                  parent: _controller,
+                  curve: Interval(begin, end, curve: Curves.easeOut))));
+      _fadeAnimations.add(Tween<double>(begin: 0, end: 1).animate(
+          CurvedAnimation(
+              parent: _controller,
+              curve: Interval(begin, end, curve: Curves.easeIn))));
+    }
   }
 
   @override
@@ -162,13 +211,13 @@ class _FilterScreenState extends State<FilterScreen> {
           centerTitle: true,
           title: Row(
             children: [
-              const Text('EggCellent',
+              const Text('Filter Products',
                   style: TextStyle(
                       color: Color(0xfff9a825),
                       fontWeight: FontWeight.bold,
                       fontSize: 24)),
               const SizedBox(width: 6),
-              Text('🐣', style: TextStyle(fontSize: 24, color: accent)),
+              Icon(Icons.filter_alt_rounded, size: 28, color: accent),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.refresh, color: Color(0xfff9a825)),
@@ -285,59 +334,204 @@ class _FilterScreenState extends State<FilterScreen> {
                                   ),
                                 ),
                               )
-                            : ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: filteredProducts.length,
-                                itemBuilder: (ctx, i) {
-                                  final p = filteredProducts[i];
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 18, vertical: 8),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: cardBg,
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: accent.withOpacity(0.35),
-                                          width: 2,
-                                        ),
-                                        boxShadow: const [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 7,
-                                            offset: Offset(3, 3),
-                                          )
-                                        ],
-                                      ),
-                                      child: ListTile(
-                                        leading: const Icon(Icons.egg_rounded,
-                                            color: Color(0xfffbc02d), size: 32),
-                                        title: Text(
-                                          p.name,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 17,
-                                              color: Colors.black87),
-                                        ),
-                                        subtitle: Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 4),
-                                          child: Text(
-                                            "City: ${p.city}\n"
-                                            "Type: ${p.type}\n"
-                                            "Region: ${p.region}\n"
-                                            "Price: \$${p.price}\n"
-                                            "Rating: ${p.sellerRating ?? 'N/A'}   •   Activity: ${p.sellerActivity ?? 'N/A'}",
-                                            style: TextStyle(
-                                                color: Colors.grey.shade800,
-                                                fontWeight: FontWeight.w500,
-                                                fontSize: 14),
+                            : AnimatedBuilder(
+                                animation: _controller,
+                                builder: (context, child) {
+                                  _setupAnimations();
+                                  return ListView.builder(
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      itemCount: filteredProducts.length,
+                                      itemBuilder: (ctx, i) {
+                                        final p = filteredProducts[i];
+                                        return SlideTransition(
+                                          position: _slideAnimations[i],
+                                          child: FadeTransition(
+                                            opacity: _fadeAnimations[i],
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 18,
+                                                      vertical: 8),
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: cardBg,
+                                                  borderRadius:
+                                                      BorderRadius.circular(24),
+                                                  border: Border.all(
+                                                    color:
+                                                        accent.withOpacity(0.4),
+                                                    width: 2,
+                                                  ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.amberAccent
+                                                          .withOpacity(0.13),
+                                                      blurRadius: 12,
+                                                      offset:
+                                                          const Offset(2, 5),
+                                                    ),
+                                                    const BoxShadow(
+                                                      color: Colors.black12,
+                                                      blurRadius: 10,
+                                                      offset: Offset(3, 3),
+                                                    ),
+                                                  ],
+                                                  gradient: LinearGradient(
+                                                    colors: [
+                                                      Colors.yellow.shade100,
+                                                      Colors.orange.shade50,
+                                                      cardBg
+                                                    ],
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
+                                                  ),
+                                                ),
+                                                child: ListTile(
+                                                  leading: CircleAvatar(
+                                                    backgroundColor:
+                                                        Colors.amber.shade50,
+                                                    radius: 26,
+                                                    child: const Icon(
+                                                        Icons.egg_rounded,
+                                                        color:
+                                                            Color(0xfffbc02d),
+                                                        size: 29),
+                                                  ),
+                                                  title: Text(
+                                                    p.name,
+                                                    style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 19,
+                                                        color: Colors.black87,
+                                                        letterSpacing: .2),
+                                                  ),
+                                                  subtitle: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            top: 4),
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                            "Type: ${p.type} • City: ${p.city}",
+                                                            style: TextStyle(
+                                                                color: Colors
+                                                                    .grey[800],
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                fontSize: 15)),
+                                                        Text(
+                                                            "Region: ${p.region}",
+                                                            style: TextStyle(
+                                                                color: Colors
+                                                                    .grey[600],
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500)),
+                                                        Row(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .spaceBetween,
+                                                          children: [
+                                                            Text(
+                                                                "Price: \$${p.price}",
+                                                                style: TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    fontSize:
+                                                                        15,
+                                                                    color: Colors
+                                                                        .deepOrangeAccent)),
+                                                            Row(
+                                                              children: [
+                                                                Icon(Icons.star,
+                                                                    color: Colors
+                                                                        .orange,
+                                                                    size: 16),
+                                                                Text(
+                                                                    "${p.sellerRating ?? 'N/A'}",
+                                                                    style: const TextStyle(
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w500,
+                                                                        color: Colors
+                                                                            .brown)),
+                                                                const SizedBox(
+                                                                    width: 12),
+                                                                Icon(
+                                                                    Icons
+                                                                        .trending_up,
+                                                                    color: Colors
+                                                                        .green,
+                                                                    size: 16),
+                                                                Text(
+                                                                    "${p.sellerActivity ?? 'N/A'}",
+                                                                    style: const TextStyle(
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w400,
+                                                                        color: Colors
+                                                                            .green)),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                        )
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  trailing: Container(
+                                                    decoration: BoxDecoration(
+                                                      color: accent,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                            color: accent
+                                                                .withOpacity(
+                                                                    0.18),
+                                                            blurRadius: 7,
+                                                            offset:
+                                                                const Offset(
+                                                                    0, 3)),
+                                                      ],
+                                                    ),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        vertical: 5,
+                                                        horizontal: 13),
+                                                    child: const Text('Details',
+                                                        style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .bold)),
+                                                  ),
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) =>
+                                                            MyAdsPage(
+                                                          adId: p.id,
+                                                          farmerid: p.farmerid,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
+                                        );
+                                      });
                                 }),
                       ],
                     ),

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/schedule.dart';
 import '../widgets/schedule_card.dart';
+import 'threshold_config_screen.dart';
 
 class AutomationSettings extends StatefulWidget {
   const AutomationSettings({super.key});
@@ -57,34 +58,38 @@ class _AutomationSettingsState extends State<AutomationSettings> {
     }
   }
 
+  /// Always fetch only one schedule per day, replacing older ones.
   Future<List<Schedule>> _fetchSchedules(String type) async {
-    final List<Schedule> out = [];
+    final Map<String, Schedule> uniquePerDay = {};
     final days = _weekDays.map((d) => d['short']!).toList();
-
-    for (final day in days) {
-      final col = _firestore
+    List<Future<QuerySnapshot>> snapshots = days.map((day) {
+      return _firestore
           .collection('sensors')
           .doc('schedule_and_threshold')
           .collection('${type}_schedule')
           .doc(day)
-          .collection(day);
+          .collection(day)
+          .get();
+    }).toList();
 
-      final snapshot = await col.get();
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        out.add(Schedule(
+    final results = await Future.wait(snapshots);
+    for (int i = 0; i < results.length; i++) {
+      for (final doc in results[i].docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        // Always keep only the latest doc for the day if multiple exist
+        uniquePerDay[days[i]] = Schedule(
           id: doc.id,
-          days: [day],
-          enabled: !(data['auto'] ?? false),
+          days: [days[i]],
+          enabled: (data?['auto'] ?? false),
           details: {
-            'startTime': data['start'],
-            'endTime': data['end'],
-            'auto': data['auto'] ?? false,
+            'startTime': data?['start'],
+            'endTime': data?['end'],
+            'auto': data?['auto'] ?? false,
           },
-        ));
+        );
       }
     }
-    return out;
+    return uniquePerDay.values.toList();
   }
 
   Future<void> _addEditSchedule(String type, {Schedule? existing}) async {
@@ -105,7 +110,7 @@ class _AutomationSettingsState extends State<AutomationSettings> {
       }
     }
 
-    bool enabled = existing?.enabled ?? true;
+    bool enabled = existing?.details['auto'] ?? false;
 
     await showDialog(
       context: context,
@@ -116,10 +121,11 @@ class _AutomationSettingsState extends State<AutomationSettings> {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             backgroundColor: Colors.grey[900],
             title: Text(
-                '${existing == null ? "Add" : "Edit"} '
-                '${type == "fan" ? "Fan" : '${type[0].toUpperCase()}${type.substring(1)}'} Schedule',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, color: Colors.white)),
+              '${existing == null ? "Add" : "Edit"} '
+              '${type == "fan" ? "Fan" : '${type[0].toUpperCase()}${type.substring(1)}'} Schedule',
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.white),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -149,7 +155,7 @@ class _AutomationSettingsState extends State<AutomationSettings> {
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Colors.white)),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 14),
                       TextButton(
                         onPressed: () async {
                           final picked = await showTimePicker(
@@ -173,20 +179,21 @@ class _AutomationSettingsState extends State<AutomationSettings> {
                               color: Colors.white)),
                       const SizedBox(width: 10),
                       TextButton(
-                          onPressed: () async {
-                            final picked = await showTimePicker(
-                              context: context,
-                              initialTime: selectedEnd ?? TimeOfDay.now(),
-                            );
-                            if (picked != null) {
-                              setState(() => selectedEnd = picked);
-                            }
-                          },
-                          child: Text(
-                              selectedEnd != null
-                                  ? "${selectedEnd!.hour.toString().padLeft(2, '0')}:${selectedEnd!.minute.toString().padLeft(2, '0')}"
-                                  : "--:--",
-                              style: const TextStyle(color: Colors.white))),
+                        onPressed: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: selectedEnd ?? TimeOfDay.now(),
+                          );
+                          if (picked != null) {
+                            setState(() => selectedEnd = picked);
+                          }
+                        },
+                        child: Text(
+                            selectedEnd != null
+                                ? "${selectedEnd!.hour.toString().padLeft(2, '0')}:${selectedEnd!.minute.toString().padLeft(2, '0')}"
+                                : "--:--",
+                            style: const TextStyle(color: Colors.white)),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -215,7 +222,6 @@ class _AutomationSettingsState extends State<AutomationSettings> {
                   final now = DateTime.now();
                   int? startUnix;
                   int? endUnix;
-                  bool auto = false;
 
                   if (selectedStart != null && selectedEnd != null) {
                     final startDt = DateTime(now.year, now.month, now.day,
@@ -225,19 +231,19 @@ class _AutomationSettingsState extends State<AutomationSettings> {
 
                     startUnix = startDt.millisecondsSinceEpoch ~/ 1000;
                     endUnix = endDt.millisecondsSinceEpoch ~/ 1000;
-                    auto = false;
                   } else {
                     startUnix = null;
                     endUnix = null;
-                    auto = true;
                   }
 
-                  final scheduleId = existing?.id ?? const Uuid().v4();
+                  // Replace the previous document for this day
+                  // Use the day's name (mon, tue, etc) as document ID
+                  final scheduleId = selectedDay;
 
                   final scheduleData = {
                     'start': startUnix,
                     'end': endUnix,
-                    'auto': auto,
+                    'auto': enabled,
                   };
 
                   final col = _firestore
@@ -247,10 +253,15 @@ class _AutomationSettingsState extends State<AutomationSettings> {
                       .doc(selectedDay)
                       .collection(selectedDay);
 
+                  // Delete all previous docs under that day
+                  final previousDocs = await col.get();
+                  for (var doc in previousDocs.docs) {
+                    await doc.reference.delete();
+                  }
+
+                  // Add or overwrite the doc for the current day
                   await col.doc(scheduleId).set(scheduleData);
-
                   await _loadAllSchedules();
-
                   if (mounted) Navigator.pop(context);
                 },
                 child: const Text('Save'),
@@ -271,6 +282,7 @@ class _AutomationSettingsState extends State<AutomationSettings> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,
@@ -289,11 +301,42 @@ class _AutomationSettingsState extends State<AutomationSettings> {
             style: TextStyle(color: Colors.white),
           ),
           iconTheme: const IconThemeData(color: Colors.white),
-          backgroundColor: Colors.black,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color.fromARGB(255, 2, 43, 90), // Deep blue
+                  Color.fromARGB(255, 15, 122, 209), // Medium blue
+                  Color.fromARGB(255, 101, 172, 230), // Light blue
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              onPressed: () {
+                _loadAllSchedules();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.tune, color: Colors.white),
+              tooltip: "Set Thresholds",
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (ctx) => ThresholdConfigScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
         body: isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -312,22 +355,11 @@ class _AutomationSettingsState extends State<AutomationSettings> {
                           Colors.grey[900]!),
                     ],
                   ),
-        floatingActionButton: FloatingActionButton.extended(
-          heroTag: 'mainButton',
-          backgroundColor: Colors.green.shade700,
-          icon: const Icon(Icons.home, color: Colors.white),
-          label: const Text('Main Menu', style: TextStyle(color: Colors.white)),
-          onPressed: () {
-            Navigator.of(context)
-                .pushNamedAndRemoveUntil('/', (route) => false);
-          },
-        ),
       ),
     );
   }
 
-  Widget _buildSection(
-      String title, List<Schedule> schedules, String type, Color color) {
+  Widget _buildSection(String title, List schedules, String type, Color color) {
     Widget sectionIcon;
     if (type == 'feeding') {
       sectionIcon = const Icon(Icons.restaurant, color: Colors.white);
@@ -402,7 +434,7 @@ class _AutomationSettingsState extends State<AutomationSettings> {
                           ),
                         )
                         .toList(),
-                  )
+                  ),
           ],
         ),
       ),
