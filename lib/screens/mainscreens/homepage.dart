@@ -763,31 +763,34 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       {
         'text': 'Transactions',
         'icon': Icons.receipt_long_rounded,
-        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'gradient': [const Color(0xFF667eea), const Color(0xFF764ba2)],
         'onPressed': () => Navigator.pushNamed(context, '/transactions'),
       },
       {
         'text': 'Add Money',
         'icon': Icons.add_card_rounded,
-        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'gradient': [const Color(0xFF11998e), const Color(0xFF38ef7d)],
         'onPressed': () => Navigator.pushNamed(context, '/wallet'),
       },
       {
         'text': 'Leaderboard',
         'icon': Icons.leaderboard_outlined,
-        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'gradient': [const Color(0xFFfa709a), const Color(0xFFfee140)],
         'onPressed': () => Navigator.pushNamed(context, '/leaderboard'),
       },
       {
         'text': 'Games',
         'icon': Icons.sports_esports_outlined,
-        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'gradient': [const Color(0xFF4facfe), const Color(0xFF00f2fe)],
         'onPressed': () => NextScreen(context, const GamesHubPage()),
       },
       {
         'text': 'Orders',
         'icon': Icons.local_mall_outlined,
-        'gradient': [const Color(0xFFFFC107), const Color(0xFFFF8F00)],
+        'gradient': [
+          const Color(0xFFf093fb),
+          const Color.fromARGB(255, 190, 15, 115)
+        ],
         'onPressed': () => Navigator.pushNamed(context, '/orders'),
       },
     ]);

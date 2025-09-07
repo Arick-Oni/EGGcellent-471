@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:poultry_app/screens/services/notification_service.dart';
 import 'package:poultry_app/screens/start/splash.dart';
+import 'package:poultry_app/screens/bottomnav.dart';
 
 // Wallet / History pages (old features)
 import 'package:poultry_app/payments/pages/wallet_page.dart';
@@ -64,6 +65,8 @@ class MyApp extends StatelessWidget {
       home: const SplashScreen(),
       //home: const TodayRatePage(),
       routes: {
+        // Main app routes
+        '/home': (_) => const BottomNavigation(),
         // legacy/payment routes
         '/wallet': (_) => const WalletPage(),
         '/transactions': (_) => const TransactionHistoryPage(),

@@ -4,9 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
+import 'data_seeder_page.dart';
 
 class GraphData extends StatefulWidget {
-  const GraphData({super.key});
+  final VoidCallback? onBackToHome;
+  const GraphData({super.key, this.onBackToHome});
 
   @override
   _GraphDataState createState() => _GraphDataState();
@@ -71,41 +73,44 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
       print('Current sensors stream error: $error');
     });
 
-    // Stream for historical data (expand search window to find any old data)
-    final thirtyDaysAgo =
-        DateTime.now().subtract(Duration(days: 30)).millisecondsSinceEpoch;
-
-    // Try both approaches - first try the main collection, then try subcollection
-    _tryMainCollectionHistory(thirtyDaysAgo);
+    // Stream for historical data from new structure
+    _loadSensorHistory();
   }
 
-  void _tryMainCollectionHistory(int thirtyDaysAgo) {
-    // The ESP8266 uploads data to individual documents with IDs starting with timestamp
-    // The docPath is "eggcellent360/sensor_history/" + docId, which means documents
-    // in the eggcellent360 collection with IDs starting with "sensor_history/"
-    _sensorStream =
-        _firestore.collection('eggcellent360').snapshots().listen((snapshot) {
+  void _loadSensorHistory() {
+    print('Loading sensor history from new structure...');
+
+    // Stream for sensor history from the new top-level sensor_history collection
+    _sensorStream = _firestore
+        .collection('sensor_history')
+        .orderBy('timestamp', descending: false)
+        .limit(100) // Limit to last 100 readings for performance
+        .snapshots()
+        .listen((snapshot) {
       List<SensorReading> readings = [];
 
-      print(
-          'Total documents in eggcellent360 collection: ${snapshot.docs.length}');
+      print('Found ${snapshot.docs.length} sensor history documents');
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final docId = doc.id;
-        print('Document ID: $docId, Fields: ${data.keys.toList()}');
 
-        // Check if this document is a sensor history document (ID starts with sensor_history/)
-        // AND contains sensor data (has timestamp and temperature fields)
-        if (docId.startsWith('sensor_history/') &&
-            data.containsKey('timestamp') &&
+        print('Processing sensor document: $docId');
+        print('Document fields: ${data.keys.toList()}');
+
+        // Validate that this document has the expected sensor data fields
+        if (data.containsKey('timestamp') &&
             data.containsKey('temperature') &&
             data.containsKey('device_id')) {
           final timestamp = (data['timestamp'] as num?)?.toInt();
-          print('Found sensor data in doc $docId with timestamp: $timestamp');
 
-          // Include ALL historical data, regardless of age (remove time filter initially)
           if (timestamp != null) {
+            final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+            final now = DateTime.now();
+            final daysDiff = now.difference(dataDate).inDays;
+
+            print('Sensor data from $daysDiff days ago ($dataDate)');
+
             readings.add(SensorReading(
               timestamp: timestamp,
               temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
@@ -116,361 +121,43 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
               arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
             ));
           }
+        } else {
+          print('Document $docId missing required fields');
         }
       }
 
-      print('Found ${readings.length} valid sensor readings');
-
-      // If no readings found with sensor_history/ prefix, check for any documents with sensor data
-      if (readings.isEmpty) {
-        print(
-            'No sensor_history/ documents found, checking all documents for sensor data...');
-        for (var doc in snapshot.docs) {
-          final data = doc.data();
-          final docId = doc.id;
-
-          // Check if this document contains sensor data (has timestamp and temperature fields)
-          if (data.containsKey('timestamp') &&
-              data.containsKey('temperature') &&
-              data.containsKey('device_id')) {
-            final timestamp = (data['timestamp'] as num?)?.toInt();
-            print('Found sensor data in doc $docId with timestamp: $timestamp');
-
-            // Show when this data was from
-            if (timestamp != null) {
-              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
-              final now = DateTime.now();
-              final daysDiff = now.difference(dataDate).inDays;
-              print('Data age: $daysDiff days ago ($dataDate)');
-            }
-
-            // Include ALL historical data, regardless of age
-            if (timestamp != null) {
-              readings.add(SensorReading(
-                timestamp: timestamp,
-                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
-                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
-                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
-                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
-                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
-                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
-              ));
-            }
-          }
-        }
-      }
-
-      print('Total found ${readings.length} valid sensor readings');
-
-      // If still no readings found in main collection, try subcollection
-      if (readings.isEmpty) {
-        print('No sensor data in main collection, trying subcollection...');
-        _trySubcollectionHistory(thirtyDaysAgo);
-        return;
-      }
+      print('Successfully processed ${readings.length} sensor readings');
 
       setState(() {
-        // Sort by timestamp
+        // Sort by timestamp (oldest first)
         readings.sort((a, b) => a.timestamp.compareTo(b.timestamp));
         sensorReadings = readings;
         isLoading = false;
 
-        // Show data age info
         if (readings.isNotEmpty) {
           final newestData =
               DateTime.fromMillisecondsSinceEpoch(readings.last.timestamp);
+          final oldestData =
+              DateTime.fromMillisecondsSinceEpoch(readings.first.timestamp);
           final daysDiff = DateTime.now().difference(newestData).inDays;
+          final dataSpan = newestData.difference(oldestData).inDays;
+
           connectionStatus =
-              'Found ${readings.length} records (newest: ${daysDiff}d ago)';
+              'Loaded ${readings.length} records (newest: ${daysDiff}d ago, span: ${dataSpan}d)';
+        } else {
+          connectionStatus = 'No Historical Data Found';
+          // Generate sample data for testing if no real data is available
+          _generateSampleDataForTesting();
         }
       });
     }, onError: (error) {
       setState(() {
         isLoading = false;
-        connectionStatus = 'Data Load Error';
+        connectionStatus = 'Data Load Error: $error';
       });
-      print('Main collection sensor history stream error: $error');
-      // Try subcollection as fallback
-      _trySubcollectionHistory(thirtyDaysAgo);
-    });
-  }
+      print('Sensor history stream error: $error');
 
-  void _trySubcollectionHistory(int thirtyDaysAgo) {
-    print('Trying subcollection approach...');
-    _sensorStream?.cancel(); // Cancel previous stream
-
-    // Based on the main.cpp file, the path "eggcellent360/sensor_history/" + docId
-    // likely creates documents in the subcollection 'sensor_history' under the 'eggcellent360' document
-    // But since eggcellent360 is a collection, the actual path should be interpreted differently
-
-    // The ESP8266 might be creating individual documents with timestamps as IDs
-    // Let's try to access the sensor_history document's subcollections
-    print('Trying direct sensor_history document subcollection...');
-
-    _sensorStream = _firestore
-        .collection('eggcellent360')
-        .doc('sensor_history')
-        .collection('data') // Try common subcollection names
-        .limit(10) // Get more documents to check
-        .snapshots()
-        .listen((snapshot) {
-      print(
-          'sensor_history/data subcollection documents found: ${snapshot.docs.length}');
-
-      if (snapshot.docs.isNotEmpty) {
-        // Check if any of these documents have sensor data
-        for (var doc in snapshot.docs) {
-          final data = doc.data();
-          if (data.containsKey('timestamp')) {
-            final timestamp = (data['timestamp'] as num?)?.toInt();
-            if (timestamp != null) {
-              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
-              final daysDiff = DateTime.now().difference(dataDate).inDays;
-              print(
-                  'Found subcollection data from $daysDiff days ago ($dataDate)');
-            }
-          }
-        }
-
-        _processSensorHistoryData(
-            snapshot, thirtyDaysAgo, 'sensor_history/data');
-      } else {
-        // Try another approach - maybe the timestamps are just document IDs directly
-        _tryTimestampDocuments(thirtyDaysAgo);
-      }
-    }, onError: (error) {
-      print('Error with sensor_history/data: $error');
-      _tryTimestampDocuments(thirtyDaysAgo);
-    });
-  }
-
-  void _tryTimestampDocuments(int thirtyDaysAgo) {
-    print('Trying timestamp-based document IDs approach...');
-
-    // The ESP8266 creates documents with timestamp IDs, let's try to query them directly
-    // We'll generate some timestamp IDs from different time periods to find any old data
-    List<String> timestampsToCheck = [];
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    // Check various time periods - last 30 days
-    for (int days = 0; days < 30; days++) {
-      // Check a few timestamps per day
-      for (int hours = 0; hours < 24; hours += 6) {
-        final timestamp =
-            now - (days * 24 * 60 * 60 * 1000) - (hours * 60 * 60 * 1000);
-        timestampsToCheck.add(timestamp.toString());
-      }
-    }
-
-    print(
-        'Checking ${timestampsToCheck.length} potential timestamp document IDs...');
-
-    // Try to get documents directly by timestamp IDs (check first batch)
-    List<Future<DocumentSnapshot<Map<String, dynamic>>>> futures = [];
-
-    for (String timestamp in timestampsToCheck.take(10)) {
-      // Check first 10 to avoid too many concurrent requests
-      futures.add(_firestore.collection('eggcellent360').doc(timestamp).get());
-    }
-
-    Future.wait(futures).then((snapshots) {
-      List<SensorReading> readings = [];
-      int foundDocs = 0;
-
-      for (var snapshot in snapshots) {
-        if (snapshot.exists) {
-          foundDocs++;
-          final data = snapshot.data()!;
-          print(
-              'Found timestamp document: ${snapshot.id}, fields: ${data.keys.toList()}');
-
-          if (data.containsKey('temperature') &&
-              data.containsKey('timestamp')) {
-            final timestamp = (data['timestamp'] as num?)?.toInt();
-            if (timestamp != null) {
-              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
-              final daysDiff = DateTime.now().difference(dataDate).inDays;
-              print('Found sensor data from $daysDiff days ago ($dataDate)');
-
-              readings.add(SensorReading(
-                timestamp: timestamp,
-                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
-                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
-                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
-                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
-                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
-                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
-              ));
-            }
-          }
-        }
-      }
-
-      print(
-          'Found $foundDocs timestamp documents, ${readings.length} with sensor data');
-
-      if (readings.isNotEmpty) {
-        setState(() {
-          sensorReadings = readings;
-          isLoading = false;
-          final daysDiff = DateTime.now()
-              .difference(
-                  DateTime.fromMillisecondsSinceEpoch(readings.last.timestamp))
-              .inDays;
-          connectionStatus =
-              'Found OLD data (${daysDiff}d ago) - Check ESP8266';
-        });
-      } else {
-        // Try one more approach - query by document ID pattern
-        _tryDocumentIdPattern(thirtyDaysAgo);
-      }
-    }).catchError((error) {
-      print('Error fetching timestamp documents: $error');
-      _tryDocumentIdPattern(thirtyDaysAgo);
-    });
-  }
-
-  void _tryDocumentIdPattern(int thirtyDaysAgo) {
-    print('Trying collection group query for any sensor_history data...');
-
-    // Try collection group query to find ANY sensor_history data, regardless of age
-    _firestore
-        .collectionGroup('sensor_history')
-        .limit(20) // Get more documents to check
-        .snapshots()
-        .listen((snapshot) {
-      print('Collection group query found: ${snapshot.docs.length} documents');
-
-      List<SensorReading> readings = [];
-
-      if (snapshot.docs.isNotEmpty) {
-        for (var doc in snapshot.docs) {
-          final data = doc.data();
-          print(
-              'Collection group doc: ${doc.reference.path}, fields: ${data.keys.toList()}');
-
-          if (data.containsKey('timestamp') &&
-              data.containsKey('temperature')) {
-            final timestamp = (data['timestamp'] as num?)?.toInt();
-            if (timestamp != null) {
-              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
-              final daysDiff = DateTime.now().difference(dataDate).inDays;
-              print(
-                  'Found collection group data from $daysDiff days ago ($dataDate)');
-
-              readings.add(SensorReading(
-                timestamp: timestamp,
-                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
-                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
-                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
-                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
-                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
-                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
-              ));
-            }
-          }
-        }
-
-        if (readings.isNotEmpty) {
-          setState(() {
-            sensorReadings =
-                readings.take(100).toList(); // Limit to 100 most recent
-            sensorReadings.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-            isLoading = false;
-            final daysDiff = DateTime.now()
-                .difference(DateTime.fromMillisecondsSinceEpoch(
-                    readings.last.timestamp))
-                .inDays;
-            connectionStatus =
-                'Found OLD data via CollectionGroup (${daysDiff}d ago)';
-          });
-          return;
-        }
-      }
-
-      // If still no data found, show helpful diagnostic information
-      _finalFallback();
-    }, onError: (error) {
-      print('Collection group query error: $error');
-      _finalFallback();
-    });
-  }
-
-  void _finalFallback() {
-    print(
-        'All approaches exhausted - checking if ESP8266 is uploading data at all...');
-
-    // Let's create a comprehensive check for any documents that might contain sensor data
-    // This will help diagnose if the ESP8266 is uploading data anywhere
-
-    // First, let's also try to access Firebase using collectionGroup for any sensor_history
-    _firestore.collectionGroup('sensor_history').limit(10).snapshots().listen(
-        (snapshot) {
-      print(
-          'Collection group sensor_history found ${snapshot.docs.length} documents');
-
-      if (snapshot.docs.isNotEmpty) {
-        for (var doc in snapshot.docs) {
-          print(
-              'Collection group doc: ${doc.reference.path}, fields: ${doc.data().keys.toList()}');
-        }
-
-        // If we found documents via collection group, use them
-        _firestore
-            .collectionGroup('sensor_history')
-            .orderBy('timestamp', descending: false)
-            .limit(100)
-            .snapshots()
-            .listen((fullSnapshot) {
-          setState(() {
-            sensorReadings = fullSnapshot.docs.map((doc) {
-              final data = doc.data();
-              return SensorReading(
-                timestamp: (data['timestamp'] as num?)?.toInt() ??
-                    DateTime.now().millisecondsSinceEpoch,
-                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
-                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
-                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
-                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
-                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
-                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
-              );
-            }).toList();
-            isLoading = false;
-            connectionStatus = 'Historical Data Found via Collection Group';
-          });
-        });
-
-        return;
-      }
-
-      // If still no data found, show helpful diagnostic information
-      _showDiagnosticInfo();
-    }, onError: (error) {
-      print('Collection group query error: $error');
-      _showDiagnosticInfo();
-    });
-  }
-
-  void _showDiagnosticInfo() {
-    print('=== DIAGNOSTIC INFORMATION ===');
-    print('1. ESP8266 appears to be updating current_sensors successfully');
-    print('2. No historical sensor data found in any expected location');
-    print('3. Possible issues:');
-    print('   - ESP8266 uploadSensorDataToFirestore() function may be failing');
-    print('   - Firebase permissions issue for creating new documents');
-    print('   - Network connectivity issues on ESP8266');
-    print('   - ESP8266 may not be calling the upload function');
-    print(
-        '4. Current_sensors document exists, so basic Firebase connection works');
-    print('5. Check ESP8266 serial output for upload errors');
-    print('===============================');
-
-    setState(() {
-      isLoading = false;
-      connectionStatus = 'ESP8266 Not Uploading History';
-
-      // Generate some sample data for demonstration purposes
+      // Generate sample data as fallback
       _generateSampleDataForTesting();
     });
   }
@@ -510,85 +197,11 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
 
     setState(() {
       sensorReadings = sampleData;
-      connectionStatus = 'Sample Data (ESP8266 Issue)';
+      connectionStatus = 'Sample Data (No Real Data Found)';
     });
 
     print(
         'Generated ${sampleData.length} sample sensor readings for chart display');
-  }
-
-  void _processSensorHistoryData(QuerySnapshot<Map<String, dynamic>> snapshot,
-      int thirtyDaysAgo, String source) {
-    print('Processing sensor data from $source...');
-
-    List<SensorReading> readings = [];
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
-      print('$source doc: ${doc.id}, fields: ${data.keys.toList()}');
-
-      if (data.containsKey('temperature') && data.containsKey('timestamp')) {
-        final timestamp = (data['timestamp'] as num?)?.toInt();
-        if (timestamp != null) {
-          final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
-          final daysDiff = DateTime.now().difference(dataDate).inDays;
-          print('$source data from $daysDiff days ago ($dataDate)');
-
-          readings.add(SensorReading(
-            timestamp: timestamp,
-            temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
-            humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
-            gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
-            lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
-            foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
-            arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
-          ));
-        }
-      }
-    }
-
-    if (readings.isNotEmpty) {
-      print('Found ${readings.length} sensor readings in $source');
-      // Get all data from this source (remove time filter)
-      _firestore
-          .collection('eggcellent360')
-          .doc('sensor_history')
-          .collection('data')
-          .orderBy('timestamp', descending: false)
-          .limit(100)
-          .snapshots()
-          .listen((fullSnapshot) {
-        setState(() {
-          sensorReadings = fullSnapshot.docs.map((doc) {
-            final data = doc.data();
-            return SensorReading(
-              timestamp: (data['timestamp'] as num?)?.toInt() ??
-                  DateTime.now().millisecondsSinceEpoch,
-              temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
-              humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
-              gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
-              lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
-              foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
-              arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
-            );
-          }).toList();
-          isLoading = false;
-
-          // Show data age
-          if (sensorReadings.isNotEmpty) {
-            final daysDiff = DateTime.now()
-                .difference(DateTime.fromMillisecondsSinceEpoch(
-                    sensorReadings.last.timestamp))
-                .inDays;
-            connectionStatus =
-                'Historical Data Loaded from $source (newest: ${daysDiff}d ago)';
-          } else {
-            connectionStatus = 'Historical Data Loaded from $source';
-          }
-        });
-      });
-    } else {
-      _tryTimestampDocuments(thirtyDaysAgo);
-    }
   }
 
   @override
@@ -672,9 +285,24 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
         centerTitle: true,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: Color(0xFF58A6FF)),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (widget.onBackToHome != null) {
+              widget.onBackToHome!();
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.add_chart, color: Color(0xFF58A6FF)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => DataSeederPage()),
+              );
+            },
+          ),
           IconButton(
             icon: Icon(
               isLoading ? Icons.hourglass_empty : Icons.refresh,
@@ -1065,44 +693,78 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
   }
 
   Widget _buildActionButtons(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () {
-              _animationController.reset();
-              _animationController.forward();
-              setState(() {
-                isLoading = true;
-              });
-              _sensorStream?.cancel();
-              _currentSensorStream?.cancel();
-              _initializeFirebaseStreams();
-            },
-            icon: Icon(Icons.refresh, size: 18),
-            label: Text('Refresh Data'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF238636),
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  _animationController.reset();
+                  _animationController.forward();
+                  setState(() {
+                    isLoading = true;
+                  });
+                  _sensorStream?.cancel();
+                  _currentSensorStream?.cancel();
+                  _initializeFirebaseStreams();
+                },
+                icon: Icon(Icons.refresh, size: 18),
+                label: Text('Refresh Data'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF238636),
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 8,
+                  shadowColor: Color(0xFF238636).withOpacity(0.3),
+                ),
               ),
-              elevation: 8,
-              shadowColor: Color(0xFF238636).withOpacity(0.3),
             ),
-          ),
+            SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  if (widget.onBackToHome != null) {
+                    widget.onBackToHome!();
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
+                icon: Icon(Icons.home, size: 18),
+                label: Text('Back to Home'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Color(0xFF58A6FF),
+                  side: BorderSide(color: Color(0xFF58A6FF)),
+                  backgroundColor: Color(0xFF58A6FF).withOpacity(0.1),
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-        SizedBox(width: 12),
-        Expanded(
+        SizedBox(height: 12),
+        // Add Data Seeder Button
+        Container(
+          width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: Icon(Icons.home, size: 18),
-            label: Text('Back to Home'),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => DataSeederPage()),
+              );
+            },
+            icon: Icon(Icons.add_chart, size: 18),
+            label: Text('Add Sample Data'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Color(0xFF58A6FF),
-              side: BorderSide(color: Color(0xFF58A6FF)),
-              backgroundColor: Color(0xFF58A6FF).withOpacity(0.1),
+              foregroundColor: Color(0xFFE3B341),
+              side: BorderSide(color: Color(0xFFE3B341)),
+              backgroundColor: Color(0xFFE3B341).withOpacity(0.1),
               padding: EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

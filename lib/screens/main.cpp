@@ -705,9 +705,9 @@
     }
 
 
-    // Create document path with timestamp
+    // Create document with timestamp as ID in sensor_history collection
     String docId = String(data.timestamp);
-    String docPath = "eggcellent360/sensor_history/" + docId;
+    String documentPath = "sensor_history/" + docId;
 
 
     // Create proper Firestore document format
@@ -725,7 +725,8 @@
     Serial.print("Uploading combined sensor data to Firestore...");
 
 
-    if (Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", docPath.c_str(), content.raw())) {
+    // Use the simpler 4-parameter version with full document path
+    if (Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str(), content.raw())) {
       Serial.println(" Success!");
       return true;
     } else {
@@ -866,7 +867,7 @@
   void createAlert(String alertType, String message) {
     if (!Firebase.ready()) return;
    
-    String docPath = "eggcellent360/alerts/" + alertType + "_" + String(millis());
+    String docPath = "alerts/" + alertType + "_" + String(millis());
    
     // Create proper Firestore document format
     FirebaseJson content;

@@ -12,11 +12,7 @@ class BottomNavigation extends StatefulWidget {
 }
 
 class _BottomNavigationState extends State<BottomNavigation> {
-  final List body = [
-    HomePage(),
-    InventoryTrackerPage(),
-    GraphData(),
-  ];
+  final List<Widget> _pages = [];
 
   int index = 0;
   bool? isBuyerLoggedIn;
@@ -25,6 +21,15 @@ class _BottomNavigationState extends State<BottomNavigation> {
   void initState() {
     super.initState();
     _loadBuyerLoginStatus();
+    _initializePages();
+  }
+
+  void _initializePages() {
+    _pages.addAll([
+      HomePage(),
+      InventoryTrackerPage(),
+      GraphData(onBackToHome: () => setState(() => index = 0)),
+    ]);
   }
 
   Future<void> _loadBuyerLoginStatus() async {
@@ -47,45 +52,45 @@ class _BottomNavigationState extends State<BottomNavigation> {
     }
 
     return Scaffold(
-      body: body[index],
+      body: _pages[index],
       bottomNavigationBar: (isBuyerLoggedIn == true)
           ? null
           : SizedBox(
-        height: navHeight + bottomPadding,
-        child: Column(
-          children: [
-            Divider(height: 1, color: Colors.grey[300]),
-            Expanded(
-              child: Container(
-                color: Colors.yellowAccent.shade200,
-                padding: EdgeInsets.only(bottom: bottomPadding),
-                child: Row(
-                  children: [
-                    _buildNavItem(
-                      icon: Icons.dashboard_outlined,
-                      label: "Dashboard",
-                      isSelected: index == 0,
-                      onTap: () => setState(() => index = 0),
+              height: navHeight + bottomPadding,
+              child: Column(
+                children: [
+                  Divider(height: 1, color: Colors.grey[300]),
+                  Expanded(
+                    child: Container(
+                      color: Colors.yellowAccent.shade200,
+                      padding: EdgeInsets.only(bottom: bottomPadding),
+                      child: Row(
+                        children: [
+                          _buildNavItem(
+                            icon: Icons.dashboard_outlined,
+                            label: "Dashboard",
+                            isSelected: index == 0,
+                            onTap: () => setState(() => index = 0),
+                          ),
+                          _buildNavItem(
+                            icon: Icons.inventory_2_outlined,
+                            label: "Inventory Tracker",
+                            isSelected: index == 1,
+                            onTap: () => setState(() => index = 1),
+                          ),
+                          _buildNavItem(
+                            icon: Icons.auto_graph,
+                            label: "Graphs",
+                            isSelected: index == 2,
+                            onTap: () => setState(() => index = 2),
+                          ),
+                        ],
+                      ),
                     ),
-                    _buildNavItem(
-                      icon: Icons.inventory_2_outlined,
-                      label: "Inventory Tracker",
-                      isSelected: index == 1,
-                      onTap: () => setState(() => index = 1),
-                    ),
-                    _buildNavItem(
-                      icon: Icons.auto_graph,
-                      label: "Graphs",
-                      isSelected: index == 2,
-                      onTap: () => setState(() => index = 2),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -116,9 +121,8 @@ class _BottomNavigationState extends State<BottomNavigation> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isSelected
-                      ? Colors.black
-                      : Colors.black.withOpacity(0.5),
+                  color:
+                      isSelected ? Colors.black : Colors.black.withOpacity(0.5),
                   height: 1.2,
                 ),
                 maxLines: 2,

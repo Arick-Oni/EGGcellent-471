@@ -312,64 +312,29 @@ class _SystemLogsPageState extends State<SystemLogsPage>
     );
   }
 
-  // Method to get all alerts from the nested structure
+  // Method to get all alerts from the new simplified structure
   Future<List<Map<String, dynamic>>> _getAllAlerts() async {
     List<Map<String, dynamic>> allAlerts = [];
 
     try {
       print('Fetching alerts from Firestore...');
-      
-      // Since we can't list subcollections directly, we'll use a different approach
-      // We'll maintain a list of known alert collection names in a separate document
-      // For now, let's try to query some recent collections based on timestamps
-      
-      final alertTypes = [
-        'high_temperature',
-        'high_gas',
-        'very_low_food',
-        'arduino_communication',
-        'feeding',
-        'fan_activation', 
-        'manual_override',
-        'system_error',
-        'water_pump',
-        'lights',
-      ];
-      
-      // Try to find collections created in the last few days
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final dayAgo = now - (24 * 60 * 60 * 1000);
-      
-      for (final alertType in alertTypes) {
-        // Try a range of timestamps around recent time
-        for (int i = 0; i < 10; i++) {
-          final testTime = dayAgo + (i * 60 * 60 * 1000); // Every hour
-          final collectionName = '${alertType}_$testTime';
-          
-          try {
-            final collection = await _firestore
-                .collection('eggcellent360')
-                .doc('alerts')
-                .collection(collectionName)
-                .get();
-                
-            if (collection.docs.isNotEmpty) {
-              print('Found collection: $collectionName with ${collection.docs.length} documents');
-              for (final doc in collection.docs) {
-                final data = doc.data();
-                data['doc_id'] = doc.id;
-                data['collection_name'] = collectionName;
-                allAlerts.add(data);
-              }
-            }
-          } catch (e) {
-            // Collection doesn't exist, continue
-          }
-        }
+
+      // Query the alerts collection directly
+      final alertsCollection = await _firestore
+          .collection('alerts')
+          .orderBy('timestamp', descending: true)
+          .limit(100) // Limit to recent 100 alerts
+          .get();
+
+      print('Found ${alertsCollection.docs.length} alert documents');
+
+      for (final doc in alertsCollection.docs) {
+        final data = doc.data();
+        data['doc_id'] = doc.id;
+        allAlerts.add(data);
       }
-      
+
       print('Total alerts found: ${allAlerts.length}');
-      
     } catch (e) {
       print('Error fetching alerts: $e');
     }
@@ -377,80 +342,96 @@ class _SystemLogsPageState extends State<SystemLogsPage>
     return allAlerts;
   }
 
-  // Helper methods to extract data from Firestore fields structure
+  // Method to get sensor history data
+  Future<List<Map<String, dynamic>>> _getSensorHistory() async {
+    List<Map<String, dynamic>> sensorData = [];
+
+    try {
+      print('Fetching sensor history from Firestore...');
+
+      // Query the sensor_history collection directly
+      final sensorCollection = await _firestore
+          .collection('sensor_history')
+          .orderBy('timestamp', descending: true)
+          .limit(50) // Limit to recent 50 sensor readings
+          .get();
+
+      print('Found ${sensorCollection.docs.length} sensor history documents');
+
+      for (final doc in sensorCollection.docs) {
+        final data = doc.data();
+        data['doc_id'] = doc.id;
+        sensorData.add(data);
+      }
+
+      print('Total sensor readings found: ${sensorData.length}');
+    } catch (e) {
+      print('Error fetching sensor history: $e');
+    }
+
+    return sensorData;
+  }
+
+  // Helper methods to extract data from the simplified Firestore structure
   String _extractType(Map<String, dynamic>? data) {
     if (data == null) return 'unknown';
-    
-    // Check Firestore fields structure
-    if (data.containsKey('fields') && 
-        data['fields'] is Map &&
-        data['fields']['type'] is Map &&
-        data['fields']['type']['stringValue'] != null) {
-      return data['fields']['type']['stringValue'] as String;
+
+    // Direct field access for simplified structure
+    if (data.containsKey('type')) {
+      return data['type'] as String? ?? 'unknown';
     }
-    
+
     return 'unknown';
   }
 
   String _extractMessage(Map<String, dynamic>? data) {
     if (data == null) return 'No message';
-    
-    // Check Firestore fields structure
-    if (data.containsKey('fields') && 
-        data['fields'] is Map &&
-        data['fields']['message'] is Map &&
-        data['fields']['message']['stringValue'] != null) {
-      return data['fields']['message']['stringValue'] as String;
+
+    // Direct field access for simplified structure
+    if (data.containsKey('message')) {
+      return data['message'] as String? ?? 'No message';
     }
-    
+
     return 'No message';
   }
 
   int _extractTimestamp(Map<String, dynamic>? data) {
     if (data == null) return 0;
-    
-    // Check Firestore fields structure
-    if (data.containsKey('fields') && 
-        data['fields'] is Map &&
-        data['fields']['timestamp'] is Map &&
-        data['fields']['timestamp']['integerValue'] != null) {
-      final value = data['fields']['timestamp']['integerValue'];
-      if (value is String) return int.tryParse(value) ?? 0;
+
+    // Direct field access for simplified structure
+    if (data.containsKey('timestamp')) {
+      final value = data['timestamp'];
       if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? 0;
+      if (value is Timestamp) return value.millisecondsSinceEpoch;
     }
-    
+
     return DateTime.now().millisecondsSinceEpoch;
   }
 
   bool _extractResolved(Map<String, dynamic>? data) {
     if (data == null) return false;
-    
-    // Check Firestore fields structure
-    if (data.containsKey('fields') && 
-        data['fields'] is Map &&
-        data['fields']['resolved'] is Map &&
-        data['fields']['resolved']['booleanValue'] != null) {
-      return data['fields']['resolved']['booleanValue'] as bool;
+
+    // Direct field access for simplified structure
+    if (data.containsKey('resolved')) {
+      return data['resolved'] as bool? ?? false;
     }
-    
+
     return false;
   }
 
   String _extractSeverity(Map<String, dynamic>? data) {
     if (data == null) return 'medium';
-    
-    // Check Firestore fields structure
-    if (data.containsKey('fields') && 
-        data['fields'] is Map &&
-        data['fields']['severity'] is Map &&
-        data['fields']['severity']['stringValue'] != null) {
-      return data['fields']['severity']['stringValue'] as String;
+
+    // Direct field access for simplified structure
+    if (data.containsKey('severity')) {
+      return data['severity'] as String? ?? 'medium';
     }
-    
+
     return 'medium';
   }
 
-  // Method to add sample data for testing (matching Arduino structure)
+  // Method to add sample data for testing (matching new Arduino structure)
   void _addSampleData() async {
     final samples = [
       {
@@ -458,51 +439,41 @@ class _SystemLogsPageState extends State<SystemLogsPage>
         'message': 'Temperature critically high: 35.5°C',
         'resolved': false,
         'severity': 'high',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
       },
       {
-        'type': 'high_gas', 
+        'type': 'high_gas',
         'message': 'Gas level critically high: 450',
         'resolved': false,
         'severity': 'high',
+        'timestamp':
+            DateTime.now().millisecondsSinceEpoch - 300000, // 5 minutes ago
       },
       {
         'type': 'very_low_food',
         'message': 'Food level critically low: 15%',
         'resolved': true,
         'severity': 'medium',
+        'timestamp':
+            DateTime.now().millisecondsSinceEpoch - 600000, // 10 minutes ago
       },
     ];
 
     try {
       for (final sample in samples) {
         final alertType = sample['type'] as String;
-        final currentTime = DateTime.now().millisecondsSinceEpoch;
-        
-        // Create collection name exactly like Arduino: {type}_{millis()}
-        final collectionName = '${alertType}_$currentTime';
-        
-        // Create Firestore document with fields structure (like Arduino)
-        final documentData = {
-          'fields': {
-            'type': {'stringValue': sample['type']},
-            'message': {'stringValue': sample['message']},
-            'timestamp': {'integerValue': currentTime.toString()},
-            'resolved': {'booleanValue': sample['resolved']},
-            'severity': {'stringValue': sample['severity']},
-          }
-        };
+        final timestamp = sample['timestamp'] as int;
 
-        // Save to: /eggcellent360/alerts/{type}_{timestamp}/{auto_doc_id}
-        await _firestore
-            .collection('eggcellent360')
-            .doc('alerts')
-            .collection(collectionName)
-            .add(documentData);
-            
-        print('Created alert collection: $collectionName');
-        
+        // Create document ID like ESP: {alert_type}_{timestamp}
+        final docId = '${alertType}_$timestamp';
+
+        // Save to: /alerts/{alert_type}_{timestamp}
+        await _firestore.collection('alerts').doc(docId).set(sample);
+
+        print('Created alert document: $docId');
+
         // Small delay to ensure different timestamps
-        await Future.delayed(const Duration(milliseconds: 10));
+        await Future.delayed(const Duration(milliseconds: 50));
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
