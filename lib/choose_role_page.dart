@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:poultry_app/newAuth/buyer_check_login.dart';
 import 'package:video_player/video_player.dart';
-import 'package:flutter/foundation.dart';
 import 'Responsive_helper.dart';
 import 'newAuth/farmer_log_in.dart';
-import 'widgets/web_video_player.dart';
 
 class ChooseRolePage extends StatefulWidget {
   const ChooseRolePage({super.key});
@@ -15,7 +13,7 @@ class ChooseRolePage extends StatefulWidget {
 
 class _ChooseRolePageState extends State<ChooseRolePage>
     with TickerProviderStateMixin {
-  VideoPlayerController? _videoController;
+  late VideoPlayerController _videoController;
   bool _isVideoInitialized = false;
   late AnimationController _idleAnimationController;
   late Animation<double> _idleAnimation;
@@ -25,9 +23,7 @@ class _ChooseRolePageState extends State<ChooseRolePage>
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) {
-      _initializeVideo();
-    }
+    _initializeVideo();
     _initializeAnimations();
   }
 
@@ -47,38 +43,21 @@ class _ChooseRolePageState extends State<ChooseRolePage>
   }
 
   void _initializeVideo() async {
-    try {
-      if (kIsWeb) {
-        // For web, we need to handle video differently
-        _videoController = VideoPlayerController.networkUrl(
-          Uri.parse('assets/videos/vdo.mp4'),
-        );
-      } else {
-        _videoController = VideoPlayerController.asset('assets/videos/vdo.mp4');
-      }
+    _videoController = VideoPlayerController.asset('assets/videos/vdo.mp4');
 
-      await _videoController!.initialize();
-      _videoController!.setLooping(true);
-      _videoController!.setVolume(0.0); // Mute the video
-      _videoController!.play();
+    await _videoController.initialize();
+    _videoController.setLooping(true);
+    _videoController.setVolume(0.0); // Mute the video
+    _videoController.play();
 
-      setState(() {
-        _isVideoInitialized = true;
-      });
-    } catch (e) {
-      print('Error initializing video: $e');
-      // Fallback: Don't show video if it fails to load
-      setState(() {
-        _isVideoInitialized = false;
-      });
-    }
+    setState(() {
+      _isVideoInitialized = true;
+    });
   }
 
   @override
   void dispose() {
-    if (!kIsWeb && _videoController != null) {
-      _videoController!.dispose();
-    }
+    _videoController.dispose();
     _idleAnimationController.dispose();
     super.dispose();
   }
@@ -234,25 +213,17 @@ class _ChooseRolePageState extends State<ChooseRolePage>
       body: Stack(
         children: [
           // Background Video
-          Positioned.fill(
-            child: kIsWeb
-                ? const WebVideoPlayer(
-                    videoPath: 'assets/videos/vdo.mp4',
-                    autoPlay: true,
-                    loop: true,
-                    muted: true,
-                  )
-                : (_isVideoInitialized && _videoController != null
-                    ? FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: _videoController!.value.size.width,
-                          height: _videoController!.value.size.height,
-                          child: VideoPlayer(_videoController!),
-                        ),
-                      )
-                    : Container(color: Colors.black)),
-          ),
+          if (_isVideoInitialized)
+            Positioned.fill(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _videoController.value.size.width,
+                  height: _videoController.value.size.height,
+                  child: VideoPlayer(_videoController),
+                ),
+              ),
+            ),
 
           // Dark overlay to make text more readable
           Positioned.fill(
