@@ -35,8 +35,8 @@ class _BuyerCreateProfileState extends State<BuyerCreateProfile> {
     setState(() => _isLoading = true);
 
     try {
-      UserCredential userCred = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
+      UserCredential userCred =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
@@ -68,7 +68,7 @@ class _BuyerCreateProfileState extends State<BuyerCreateProfile> {
 
       Timer(
         const Duration(seconds: 2),
-            () {
+        () {
           Navigator.pop(context);
           NextScreenReplace(context, const BuyerLogin());
         },
@@ -100,7 +100,8 @@ class _BuyerCreateProfileState extends State<BuyerCreateProfile> {
       style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Theme.of(context).colorScheme.onBackground),
+        labelStyle:
+            TextStyle(color: Theme.of(context).colorScheme.onBackground),
         filled: true,
         fillColor: Theme.of(context).colorScheme.surface,
         border: OutlineInputBorder(
@@ -117,7 +118,8 @@ class _BuyerCreateProfileState extends State<BuyerCreateProfile> {
     );
   }
 
-  Widget _buildGradientButton({required String text, required VoidCallback onTap}) {
+  Widget _buildGradientButton(
+      {required String text, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -166,18 +168,22 @@ class _BuyerCreateProfileState extends State<BuyerCreateProfile> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: ResponsiveHelper.paddingSymmetric(horizontal: 15, vertical: 20),
+          padding:
+              ResponsiveHelper.paddingSymmetric(horizontal: 15, vertical: 20),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: ResponsiveHelper.isDesktop(context) ? 500 : double.infinity,
+              maxWidth:
+                  ResponsiveHelper.isDesktop(context) ? 500 : double.infinity,
             ),
             child: Card(
               color: Colors.grey.shade900,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24)),
               elevation: 8,
               shadowColor: Colors.cyanAccent,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -185,13 +191,15 @@ class _BuyerCreateProfileState extends State<BuyerCreateProfile> {
                       Text(
                         "Buyer Registration",
                         style: TextStyle(
-                          fontSize: ResponsiveHelper.isDesktop(context) ? 26 : 20,
+                          fontSize:
+                              ResponsiveHelper.isDesktop(context) ? 26 : 20,
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).colorScheme.onBackground,
                         ),
                       ),
                       const SizedBox(height: 20),
-                      _buildTextField(controller: _nameController, label: "Name"),
+                      _buildTextField(
+                          controller: _nameController, label: "Name"),
                       const SizedBox(height: 15),
                       _buildTextField(
                           controller: _emailController,
@@ -208,17 +216,22 @@ class _BuyerCreateProfileState extends State<BuyerCreateProfile> {
                           label: "Phone",
                           inputType: TextInputType.phone),
                       const SizedBox(height: 15),
-                      _buildTextField(controller: _countryController, label: "Country"),
+                      _buildTextField(
+                          controller: _countryController, label: "Country"),
                       const SizedBox(height: 15),
-                      _buildTextField(controller: _stateController, label: "State"),
+                      _buildTextField(
+                          controller: _stateController, label: "State"),
                       const SizedBox(height: 15),
-                      _buildTextField(controller: _cityController, label: "City"),
+                      _buildTextField(
+                          controller: _cityController, label: "City"),
                       const SizedBox(height: 15),
-                      _buildTextField(controller: _villageController, label: "Village"),
+                      _buildTextField(
+                          controller: _villageController, label: "Village"),
                       const SizedBox(height: 25),
                       _isLoading
                           ? const CircularProgressIndicator()
-                          : _buildGradientButton(text: "Register", onTap: _saveBuyerProfile),
+                          : _buildGradientButton(
+                              text: "Register", onTap: _saveBuyerProfile),
                     ],
                   ),
                 ),

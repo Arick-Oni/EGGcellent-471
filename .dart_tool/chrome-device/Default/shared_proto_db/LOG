@@ -1,6 +1,9 @@
-2025/09/08-03:41:07.072 4a8c Reusing MANIFEST C:\Users\USER\AppData\Local\Temp\flutter_tools.ab680a0e\flutter_tools_chrome_device.fbdad499\Default\shared_proto_db/MANIFEST-000001
-2025/09/08-03:41:07.073 4a8c Recovering log #10
-2025/09/08-03:41:07.074 4a8c Reusing old log C:\Users\USER\AppData\Local\Temp\flutter_tools.ab680a0e\flutter_tools_chrome_device.fbdad499\Default\shared_proto_db/000010.log 
-2025/09/08-03:41:07.074 4a8c Delete type=0 #3
-2025/09/08-03:41:07.074 4a8c Delete type=0 #4
-2025/09/08-03:41:07.074 4a8c Delete type=0 #7
+2025/09/08-04:32:21.742 c48 Reusing MANIFEST C:\Users\USER\AppData\Local\Temp\flutter_tools.48c7c0e3\flutter_tools_chrome_device.e381c3bb\Default\shared_proto_db/MANIFEST-000001
+2025/09/08-04:32:21.743 c48 Recovering log #10
+2025/09/08-04:32:21.744 c48 Reusing old log C:\Users\USER\AppData\Local\Temp\flutter_tools.48c7c0e3\flutter_tools_chrome_device.e381c3bb\Default\shared_proto_db/000010.log 
+2025/09/08-04:32:21.745 c48 Delete type=0 #3
+2025/09/08-04:32:21.745 c48 Delete type=0 #4
+2025/09/08-04:32:21.745 c48 Delete type=0 #7
+2025/09/08-04:34:20.080 1a18 Level-0 table #14: started
+2025/09/08-04:34:20.085 1a18 Level-0 table #14: 131913 bytes OK
+2025/09/08-04:34:20.086 1a18 Delete type=0 #10
