@@ -47,8 +47,8 @@
 
 
   // Timing intervals
-  #define SENSOR_READ_INTERVAL 3000     // 3 seconds
-  #define ACTUATOR_CHECK_INTERVAL 5000   // 5 seconds
+  #define SENSOR_READ_INTERVAL 5000     // 5 seconds - slower to reduce conflicts
+  #define ACTUATOR_CHECK_INTERVAL 8000   // 8 seconds - read actuator states from Firestore
   #define THRESHOLD_CHECK_INTERVAL 60000 // 60 seconds
   #define ARDUINO_REQUEST_INTERVAL 4000   // 4 seconds - request Arduino sensor data
 
@@ -99,6 +99,7 @@
   bool currentPumpState = false;
   bool currentFeederState = false;
   bool currentWateringState = false;
+  bool currentAutoMode = true; // Cache auto mode state
 
 
   // Combined sensor data structure (ESP8266 + Arduino sensors)
@@ -197,23 +198,26 @@
       lastArduinoRequest = millis();
     }
    
-    // Read and upload sensor data
+    // Check actuator commands from Firestore FIRST (before automatic control decisions)
+    if (millis() - lastActuatorCheck >= ACTUATOR_CHECK_INTERVAL) {
+      checkAndUpdateActuators();
+      lastActuatorCheck = millis();
+    }
+   
+    // Read and upload sensor data + run automatic controls (only if in auto mode)
     if (millis() - lastSensorRead >= SENSOR_READ_INTERVAL) {
       SensorData data = readCombinedSensors();
       if (data.dataValid) {
         if (uploadSensorDataToFirestore(data)) {
           updateLatestSensorValues(data);
-          processAutomaticControls(data);
+          // Only run automatic controls if we're not in the middle of an actuator update
+          if (millis() - lastActuatorCheck > 2000) { // 2 second buffer
+            processAutomaticControls(data);
+          }
           Serial.println("Sensor data uploaded and processed");
         }
       }
       lastSensorRead = millis();
-    }
-   
-    // Check actuator commands from Firestore
-    if (millis() - lastActuatorCheck >= ACTUATOR_CHECK_INTERVAL) {
-      checkAndUpdateActuators();
-      lastActuatorCheck = millis();
     }
    
     // Update thresholds from Firestore
@@ -771,74 +775,152 @@
 
 
   void processAutomaticControls(SensorData data) {
+    // Only proceed with automatic controls if auto mode is enabled
+    if (!currentAutoMode) {
+      Serial.println("Auto mode disabled - skipping automatic controls");
+      createAlertsIfNeeded(data); // Still create alerts even in manual mode
+      return;
+    }
+
+    Serial.println("Auto mode enabled - processing automatic controls");
+    
+    // Get current actuator states from Firestore first to avoid conflicts
+    if (!readActuatorStatesFromFirestore()) {
+      Serial.println("Failed to read current actuator states for auto control");
+      createAlertsIfNeeded(data);
+      return;
+    }
+    
+    // Re-check auto mode after reading from Firestore (might have changed)
+    if (!currentAutoMode) {
+      Serial.println("Auto mode was disabled during read - aborting auto controls");
+      createAlertsIfNeeded(data);
+      return;
+    }
+    
     FirebaseJson content;
     bool anyChange = false;
 
-
-    // Temperature control
-    if (data.temperature > currentThresholds.temperature) {
+    // Temperature control - only change if threshold is exceeded
+    if (data.temperature > currentThresholds.temperature && !currentFan2State) {
       content.set("fields/fan2/booleanValue", true);
       Serial.println("Auto: Fan2 ON - High temperature");
       anyChange = true;
-    } else {
+    } else if (data.temperature <= currentThresholds.temperature - 1.0 && currentFan2State) {
+      // Add hysteresis - turn off 1 degree below threshold
       content.set("fields/fan2/booleanValue", false);
+      Serial.println("Auto: Fan2 OFF - Temperature normalized");
+      anyChange = true;
     }
 
-
-    // Gas control
-    if (data.gasLevel > currentThresholds.gasLevel) {
+    // Gas control - only change if threshold is exceeded
+    if (data.gasLevel > currentThresholds.gasLevel && !currentExhaustState) {
       content.set("fields/exhaust_fan/booleanValue", true);
       Serial.println("Auto: Exhaust fan ON - High gas level");
       anyChange = true;
-    } else {
+    } else if (data.gasLevel <= currentThresholds.gasLevel - 50 && currentExhaustState) {
+      // Add hysteresis - turn off 50 points below threshold
       content.set("fields/exhaust_fan/booleanValue", false);
-    }
-
-
-    // Light control (only if Arduino data is valid)
-    if (data.arduinoDataValid && data.lightLevel < currentThresholds.lightLevel) {
-      content.set("fields/lights/booleanValue", true);
-      Serial.println("Auto: Lights ON - Low ambient light");
+      Serial.println("Auto: Exhaust fan OFF - Gas level normalized");
       anyChange = true;
-    } else {
-      content.set("fields/lights/booleanValue", false);
     }
 
+    // Light control (only if Arduino data is valid) - only change if threshold is not met
+    if (data.arduinoDataValid) {
+      if (data.lightLevel < currentThresholds.lightLevel && !currentLightState) {
+        content.set("fields/lights/booleanValue", true);
+        Serial.println("Auto: Lights ON - Low ambient light");
+        anyChange = true;
+      } else if (data.lightLevel >= currentThresholds.lightLevel + 50 && currentLightState) {
+        // Add hysteresis - turn off 50 points above threshold
+        content.set("fields/lights/booleanValue", false);
+        Serial.println("Auto: Lights OFF - Ambient light sufficient");
+        anyChange = true;
+      }
+    }
 
     // Food level control (only if Arduino data is valid)
     if (data.arduinoDataValid) {
-      if (data.foodLevel < currentThresholds.foodLow) {
+      if (data.foodLevel < currentThresholds.foodLow && !currentFeederState) {
         content.set("fields/feeder/booleanValue", true);
         Serial.println("Auto: Feeder ON - Low food level");
         anyChange = true;
-      } else if (data.foodLevel > currentThresholds.foodHigh) {
+      } else if (data.foodLevel > currentThresholds.foodHigh && currentFeederState) {
         content.set("fields/feeder/booleanValue", false);
+        Serial.println("Auto: Feeder OFF - Food level sufficient");
+        anyChange = true;
       }
     }
 
-
-    // Humidity control
-    if (data.humidity > currentThresholds.humidityMax) {
+    // Humidity control - only change if thresholds are exceeded
+    if (data.humidity > currentThresholds.humidityMax && !currentFan1State) {
       content.set("fields/fan1/booleanValue", true);
       Serial.println("Auto: Fan1 ON - High humidity");
       anyChange = true;
-    } else if (data.humidity < currentThresholds.humidityMin) {
+    } else if (data.humidity < currentThresholds.humidityMin && currentFan1State) {
       content.set("fields/fan1/booleanValue", false);
+      Serial.println("Auto: Fan1 OFF - Low humidity");
+      anyChange = true;
+    } else if (data.humidity <= currentThresholds.humidityMax - 5.0 && currentFan1State && data.humidity > currentThresholds.humidityMin) {
+      // Add hysteresis for humidity - turn off 5% below max threshold
+      content.set("fields/fan1/booleanValue", false);
+      Serial.println("Auto: Fan1 OFF - Humidity normalized");
+      anyChange = true;
     }
 
-
     if (anyChange) {
-      content.set("fields/auto_mode/booleanValue", true);
-      content.set("fields/last_update/integerValue", String(data.timestamp));
-     
-      if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", "eggcellent360/actuators", content.raw(), "")) {
-        Serial.println("Automatic controls updated");
+      // Get the complete current document to avoid overwriting other fields
+      String documentPath = "eggcellent360/actuators";
+      
+      if (Firebase.Firestore.getDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str())) {
+        FirebaseJson currentDoc;
+        currentDoc.setJsonData(fbdo.payload());
+        
+        FirebaseJsonData jsonData;
+        FirebaseJson completeContent;
+        
+        // Copy all existing fields
+        if (currentDoc.get(jsonData, "fields")) {
+          completeContent.set("fields", jsonData.jsonObject);
+        }
+        
+        // Update only the changed actuator fields
+        FirebaseJsonData contentData;
+        FirebaseJson *fieldsObj = completeContent.getJsonObjectPtr("fields");
+        
+        // Apply our changes to the complete document
+        if (content.get(contentData, "fields/fan1/booleanValue")) {
+          fieldsObj->set("fan1/booleanValue", contentData.boolValue);
+        }
+        if (content.get(contentData, "fields/fan2/booleanValue")) {
+          fieldsObj->set("fan2/booleanValue", contentData.boolValue);
+        }
+        if (content.get(contentData, "fields/exhaust_fan/booleanValue")) {
+          fieldsObj->set("exhaust_fan/booleanValue", contentData.boolValue);
+        }
+        if (content.get(contentData, "fields/lights/booleanValue")) {
+          fieldsObj->set("lights/booleanValue", contentData.boolValue);
+        }
+        if (content.get(contentData, "fields/feeder/booleanValue")) {
+          fieldsObj->set("feeder/booleanValue", contentData.boolValue);
+        }
+        
+        // Update timestamp
+        fieldsObj->set("last_update/integerValue", String(data.timestamp));
+        fieldsObj->set("updated_by/stringValue", "auto_control");
+        
+        // Write the complete document back
+        if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", "eggcellent360/actuators", completeContent.raw(), "")) {
+          Serial.println("Automatic controls updated successfully");
+        } else {
+          Serial.print("Auto control update failed: ");
+          Serial.println(fbdo.errorReason());
+        }
       } else {
-        Serial.print("Auto control update failed: ");
+        Serial.print("Failed to read current document for auto update: ");
         Serial.println(fbdo.errorReason());
       }
     }
-
 
     // Create alerts for critical conditions
     createAlertsIfNeeded(data);
@@ -912,6 +994,7 @@
       // Extract all actuator states
       bool fan1State = false, fan2State = false, exhaustState = false;
       bool lightState = false, pumpState = false, feederState = false, wateringState = false;
+      bool autoMode = true; // default to true
      
       if (json.get(jsonData, "fields/fan1/booleanValue")) {
         fan1State = jsonData.boolValue;
@@ -933,6 +1016,9 @@
       }
       if (json.get(jsonData, "fields/watering_active/booleanValue")) {
         wateringState = jsonData.boolValue;
+      }
+      if (json.get(jsonData, "fields/auto_mode/booleanValue")) {
+        autoMode = jsonData.boolValue;
       }
      
       // Update current states only if they changed
@@ -978,6 +1064,12 @@
         currentWateringState = wateringState;
         statesChanged = true;
         Serial.println("Watering state changed: " + String(wateringState ? "ON" : "OFF"));
+      }
+
+      if (currentAutoMode != autoMode) {
+        currentAutoMode = autoMode;
+        statesChanged = true;
+        Serial.println("Auto mode changed: " + String(autoMode ? "ENABLED" : "DISABLED"));
       }
      
       if (statesChanged) {

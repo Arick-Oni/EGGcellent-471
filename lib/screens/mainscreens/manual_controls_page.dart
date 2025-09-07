@@ -11,9 +11,6 @@ class ManualControlsPage extends StatefulWidget {
 class _ManualControlsPageState extends State<ManualControlsPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Fixed device ID matching ESP8266 code
-  static const String deviceId = 'eggcellent360';
-
   // All actuator control states from ESP8266
   Map<String, bool> actuatorStates = {
     'fan1': false, // Humidity control fan
@@ -45,43 +42,45 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
   }
 
   void _loadInitialData() {
-    // Load actuator states from Firestore (matching ESP8266 structure)
-    _firestore.doc('$deviceId/actuators').snapshots().listen((snapshot) {
+    // Load actuator states from Firestore - simple key-value structure
+    _firestore.doc('actuators/latest').snapshots().listen((snapshot) {
       if (snapshot.exists && snapshot.data() != null) {
         final data = snapshot.data()!;
+        print('Raw Firestore actuator data: $data'); // Debug print
+
         setState(() {
-          // Extract boolean values from Firestore fields structure
+          // Simple direct field reading
           actuatorStates = {
-            'fan1': _extractBoolValue(data, 'fan1'),
-            'fan2': _extractBoolValue(data, 'fan2'),
-            'exhaust_fan': _extractBoolValue(data, 'exhaust_fan'),
-            'lights': _extractBoolValue(data, 'lights'),
-            'water_pump': _extractBoolValue(data, 'water_pump'),
-            'feeder': _extractBoolValue(data, 'feeder'),
-            'watering_active': _extractBoolValue(data, 'watering_active'),
-            'auto_mode':
-                _extractBoolValue(data, 'auto_mode', defaultValue: true),
+            'fan1': data['fan1'] ?? false,
+            'fan2': data['fan2'] ?? false,
+            'exhaust_fan': data['exhaust_fan'] ?? false,
+            'lights': data['lights'] ?? false,
+            'water_pump': data['water_pump'] ?? false,
+            'feeder': data['feeder'] ?? false,
+            'watering_active': data['watering_active'] ?? false,
+            'auto_mode': data['auto_mode'] ?? true,
           };
         });
-        print('Actuator states loaded: $actuatorStates');
+        print('Parsed actuator states: $actuatorStates'); // Debug print
       }
     }, onError: (error) {
       print('Error loading actuator states: $error');
     });
 
-    // Load system status
-    _firestore.doc('$deviceId/system_status').snapshots().listen((snapshot) {
+    // Load system status from simple path structure
+    _firestore.doc('eggcellent360/system_status').snapshots().listen(
+        (snapshot) {
       if (snapshot.exists && snapshot.data() != null) {
         final data = snapshot.data()!;
         setState(() {
+          // Simple direct field reading
           systemStatus = {
-            'status':
-                _extractStringValue(data, 'status', defaultValue: 'offline'),
-            'arduino_connection': _extractBoolValue(data, 'arduino_connection'),
-            'device_id': _extractStringValue(data, 'device_id'),
-            'uptime': _extractIntValue(data, 'uptime'),
-            'free_heap': _extractIntValue(data, 'free_heap'),
-            'wifi_rssi': _extractIntValue(data, 'wifi_rssi'),
+            'status': data['status'] ?? 'offline',
+            'arduino_connection': data['arduino_connection'] ?? false,
+            'device_id': data['device_id'] ?? '',
+            'uptime': data['uptime'] ?? 0,
+            'free_heap': data['free_heap'] ?? 0,
+            'wifi_rssi': data['wifi_rssi'] ?? 0,
           };
         });
         print('System status loaded: $systemStatus');
@@ -91,54 +90,24 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
     });
   }
 
-  // Helper methods to extract values from Firestore fields structure
-  bool _extractBoolValue(Map<String, dynamic> data, String field,
-      {bool defaultValue = false}) {
-    if (data.containsKey('fields') && data['fields'][field] != null) {
-      return data['fields'][field]['booleanValue'] ?? defaultValue;
-    }
-    return data[field] ?? defaultValue;
-  }
-
-  String _extractStringValue(Map<String, dynamic> data, String field,
-      {String defaultValue = ''}) {
-    if (data.containsKey('fields') && data['fields'][field] != null) {
-      return data['fields'][field]['stringValue'] ?? defaultValue;
-    }
-    return data[field] ?? defaultValue;
-  }
-
-  int _extractIntValue(Map<String, dynamic> data, String field,
-      {int defaultValue = 0}) {
-    if (data.containsKey('fields') && data['fields'][field] != null) {
-      final value = data['fields'][field]['integerValue'];
-      if (value is String) {
-        return int.tryParse(value) ?? defaultValue;
-      }
-      return value ?? defaultValue;
-    }
-    return data[field] ?? defaultValue;
-  }
-
   Future<void> _toggleActuator(String actuator, bool currentState) async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Create Firestore document format matching ESP8266 expectations
-      final updateData = {
-        'fields': {
-          actuator: {'booleanValue': !currentState},
-          'last_update': {
-            'integerValue': DateTime.now().millisecondsSinceEpoch.toString()
-          },
-        }
+      // Simple direct field update
+      Map<String, dynamic> updateData = {
+        actuator: !currentState,
+        'last_update': DateTime.now().millisecondsSinceEpoch,
+        'updated_by': 'flutter_app'
       };
 
-      await _firestore
-          .doc('$deviceId/actuators')
-          .set(updateData, SetOptions(merge: true));
+      print('Updating actuator $actuator to ${!currentState}'); // Debug print
+      print('Update data structure: $updateData'); // Debug print
+
+      // Use update() to only update specific fields
+      await _firestore.doc('actuators/latest').update(updateData);
 
       // Show success feedback
       ScaffoldMessenger.of(context).showSnackBar(
@@ -158,6 +127,7 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
           duration: const Duration(seconds: 3),
         ),
       );
+      print('Error updating actuator: $e'); // Debug print
     } finally {
       setState(() {
         _isLoading = false;
@@ -171,28 +141,21 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
     });
 
     try {
-      // Create Firestore document format matching ESP8266 expectations
+      // Simple direct field updates
       final updateData = {
-        'fields': {
-          'fan1': {'booleanValue': state},
-          'fan2': {'booleanValue': state},
-          'exhaust_fan': {'booleanValue': state},
-          'lights': {'booleanValue': state},
-          'water_pump': {'booleanValue': state},
-          'feeder': {'booleanValue': state},
-          'watering_active': {'booleanValue': state},
-          'auto_mode': {
-            'booleanValue': false
-          }, // Disable auto mode when using manual override
-          'last_update': {
-            'integerValue': DateTime.now().millisecondsSinceEpoch.toString()
-          },
-        }
+        'fan1': state,
+        'fan2': state,
+        'exhaust_fan': state,
+        'lights': state,
+        'water_pump': state,
+        'feeder': state,
+        'watering_active': state,
+        'auto_mode': false, // Disable auto mode when using manual override
+        'last_update': DateTime.now().millisecondsSinceEpoch,
+        'updated_by': 'flutter_emergency_override',
       };
 
-      await _firestore
-          .doc('$deviceId/actuators')
-          .set(updateData, SetOptions(merge: true));
+      await _firestore.doc('actuators/latest').update(updateData);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -209,6 +172,7 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
           duration: const Duration(seconds: 3),
         ),
       );
+      print('Error setting all actuators: $e'); // Debug print
     } finally {
       setState(() {
         _isLoading = false;
@@ -224,19 +188,14 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
     try {
       final newAutoModeState = !actuatorStates['auto_mode']!;
 
-      // Create Firestore document format matching ESP8266 expectations
+      // Simple direct field update
       final updateData = {
-        'fields': {
-          'auto_mode': {'booleanValue': newAutoModeState},
-          'last_update': {
-            'integerValue': DateTime.now().millisecondsSinceEpoch.toString()
-          },
-        }
+        'auto_mode': newAutoModeState,
+        'last_update': DateTime.now().millisecondsSinceEpoch,
+        'updated_by': 'flutter_mode_toggle',
       };
 
-      await _firestore
-          .doc('$deviceId/actuators')
-          .set(updateData, SetOptions(merge: true));
+      await _firestore.doc('actuators/latest').update(updateData);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -254,6 +213,7 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
           duration: const Duration(seconds: 3),
         ),
       );
+      print('Error toggling auto mode: $e'); // Debug print
     } finally {
       setState(() {
         _isLoading = false;
@@ -268,7 +228,7 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manual Controls - EGGCELLENT360'),
+        title: const Text('Manual Controls - ESP8266'),
         backgroundColor: Colors.orange,
         centerTitle: true,
         actions: [
@@ -476,7 +436,7 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
               const SizedBox(height: 20),
 
               const Text(
-                'ESP8266 Actuator Controls',
+                'Actuator Controls',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -731,7 +691,10 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _buildInfoRow('Device ID', deviceId),
+                      _buildInfoRow('Actuator Collection', 'actuators/latest'),
+                      _buildInfoRow('System Status Collection',
+                          'eggcellent360/system_status'),
+                      _buildInfoRow('Data Format', 'Nested Firestore fields'),
                       _buildInfoRow('ESP8266 Status',
                           isSystemOnline ? 'Online' : 'Offline'),
                       _buildInfoRow('Arduino Connection',
@@ -747,7 +710,8 @@ class _ManualControlsPageState extends State<ManualControlsPage> {
                       const SizedBox(height: 10),
                       Text(
                         'Note: LED lights are controlled directly by ESP8266 GPIO pins. '
-                        'All other actuators are controlled via serial commands to Arduino.',
+                        'All other actuators are controlled via serial commands to Arduino. '
+                        'Data is stored using nested Firestore field structure for compatibility with ESP8266.',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],

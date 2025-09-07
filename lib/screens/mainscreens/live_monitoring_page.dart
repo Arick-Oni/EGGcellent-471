@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:poultry_app/screens/mainscreens/manual_controls_page.dart';
-import 'package:poultry_app/widgets/navigation.dart';
 
 class LiveMonitoringPage extends StatefulWidget {
   const LiveMonitoringPage({Key? key}) : super(key: key);
@@ -12,10 +11,6 @@ class LiveMonitoringPage extends StatefulWidget {
 
 class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  // Device selection (matching your ESP8266 setup)
-  String selectedDevice = 'eggcellent360'; // Default device
-  List<String> availableDevices = ['eggcellent360']; // Your ESP8266 device
 
   // Realtime data from ESP8266
   Map<String, dynamic> currentSensors = {
@@ -73,72 +68,95 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
   }
 
   void _loadCurrentSensors() {
-    // Load current sensor data from Firestore
-    _firestore
-        .collection(selectedDevice)
-        .doc('current_sensors')
-        .snapshots()
-        .listen((snapshot) {
+    // Load current sensor data from Firestore - using new simple structure
+    _firestore.doc('eggcellent360/current_sensors').snapshots().listen(
+        (snapshot) {
       if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
         setState(() {
-          currentSensors = snapshot.data()!;
+          currentSensors = {
+            'temperature': data['temperature'] ?? 0.0,
+            'humidity': data['humidity'] ?? 0.0,
+            'gas_level': data['gas_level'] ?? 0,
+            'light_level': data['light_level'] ?? 0,
+            'food_level': data['food_level'] ?? 0,
+            'last_update': data['last_update'] ?? 0,
+            'data_valid': data['data_valid'] ?? false,
+            'arduino_data_valid': data['arduino_data_valid'] ?? false,
+          };
         });
       }
+    }, onError: (error) {
+      print('Error loading current sensors: $error');
     });
   }
 
   void _loadActuatorsData() {
-    // Load actuator states from Firestore
-    _firestore
-        .collection(selectedDevice)
-        .doc('actuators')
-        .snapshots()
-        .listen((snapshot) {
+    // Load actuator states from Firestore - using new simple structure
+    _firestore.doc('actuators/latest').snapshots().listen((snapshot) {
       if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
         setState(() {
-          actuatorsData = snapshot.data()!;
+          // Simple direct field reading matching manual controls structure
+          actuatorsData = {
+            'fan1': data['fan1'] ?? false,
+            'fan2': data['fan2'] ?? false,
+            'exhaust_fan': data['exhaust_fan'] ?? false,
+            'lights': data['lights'] ?? false,
+            'water_pump': data['water_pump'] ?? false,
+            'feeder': data['feeder'] ?? false,
+            'watering_active': data['watering_active'] ?? false,
+            'auto_mode': data['auto_mode'] ?? true,
+          };
         });
       }
+    }, onError: (error) {
+      print('Error loading actuator states: $error');
     });
   }
 
   void _loadSystemStatus() {
-    // Load system status from Firestore
-    _firestore
-        .collection(selectedDevice)
-        .doc('system_status')
-        .snapshots()
-        .listen((snapshot) {
+    // Load system status from Firestore - using new simple structure
+    _firestore.doc('eggcellent360/system_status').snapshots().listen(
+        (snapshot) {
       if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
         setState(() {
-          systemStatus = snapshot.data()!;
+          systemStatus = {
+            'status': data['status'] ?? 'offline',
+            'uptime': data['uptime'] ?? 0,
+            'free_heap': data['free_heap'] ?? 0,
+            'wifi_rssi': data['wifi_rssi'] ?? 0,
+            'arduino_connection': data['arduino_connection'] ?? false,
+            'last_update': data['last_update'] ?? 0,
+          };
         });
       }
+    }, onError: (error) {
+      print('Error loading system status: $error');
     });
   }
 
   void _loadThresholds() {
-    // Load thresholds from Firestore
-    _firestore
-        .collection(selectedDevice)
-        .doc('thresholds')
-        .snapshots()
-        .listen((snapshot) {
+    // Load thresholds from Firestore - using new simple structure
+    _firestore.doc('eggcellent360/thresholds').snapshots().listen((snapshot) {
       if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
         setState(() {
-          thresholds = snapshot.data()!;
+          thresholds = {
+            'temperature': data['temperature'] ?? 32.0,
+            'humidity_max': data['humidity_max'] ?? 60.0,
+            'humidity_min': data['humidity_min'] ?? 50.0,
+            'gas_level': data['gas_level'] ?? 400,
+            'light_level': data['light_level'] ?? 300,
+            'food_low': data['food_low'] ?? 200,
+            'food_high': data['food_high'] ?? 800,
+          };
         });
       }
+    }, onError: (error) {
+      print('Error loading thresholds: $error');
     });
-  }
-
-  void _onDeviceChanged(String? newValue) {
-    if (newValue != null && newValue != selectedDevice) {
-      setState(() {
-        selectedDevice = newValue;
-      });
-      _loadInitialData(); // Reload data for the new device
-    }
   }
 
   String _formatLastUpdate(int timestamp) {
@@ -562,7 +580,13 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
                           children: [
                             ElevatedButton.icon(
                               onPressed: () {
-                                NextScreen(context, const ManualControlsPage());
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const ManualControlsPage(),
+                                  ),
+                                );
                               },
                               icon: const Icon(Icons.settings),
                               label: const Text('Manual Controls'),
