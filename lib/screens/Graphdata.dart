@@ -1,8 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:poultry_app/screens/mainscreens/homepage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:async';
 
 class GraphData extends StatefulWidget {
   const GraphData({super.key});
@@ -15,46 +16,19 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
-  // Sample data - replace with your actual poultry sensor data
-  final List<SensorData> temperatureData = [
-    SensorData(1, 22.5),
-    SensorData(2, 24.0),
-    SensorData(3, 23.8),
-    SensorData(4, 25.2),
-    SensorData(5, 26.1),
-    SensorData(6, 24.7),
-    SensorData(7, 23.9),
-  ];
+  // Firebase instance
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final List<SensorData> humidityData = [
-    SensorData(1, 65.0),
-    SensorData(2, 68.5),
-    SensorData(3, 72.0),
-    SensorData(4, 70.3),
-    SensorData(5, 69.8),
-    SensorData(6, 71.2),
-    SensorData(7, 73.5),
-  ];
+  // Real-time data lists
+  List<SensorReading> sensorReadings = [];
+  Map<String, dynamic> currentReadings = {};
+  bool isLoading = true;
+  String connectionStatus = 'Connecting...';
 
-  final List<SensorData> gasData = [
-    SensorData(1, 120.0),
-    SensorData(2, 135.0),
-    SensorData(3, 128.0),
-    SensorData(4, 142.0),
-    SensorData(5, 138.0),
-    SensorData(6, 145.0),
-    SensorData(7, 132.0),
-  ];
-
-  final List<SensorData> ammoniaData = [
-    SensorData(1, 15.2),
-    SensorData(2, 18.7),
-    SensorData(3, 16.9),
-    SensorData(4, 20.1),
-    SensorData(5, 19.3),
-    SensorData(6, 17.8),
-    SensorData(7, 21.4),
-  ];
+  // Timer for periodic updates
+  Timer? _dataTimer;
+  StreamSubscription<QuerySnapshot>? _sensorStream;
+  StreamSubscription<DocumentSnapshot>? _currentSensorStream;
 
   @override
   void initState() {
@@ -70,75 +44,721 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
+
+    _initializeFirebaseStreams();
     _animationController.forward();
+  }
+
+  void _initializeFirebaseStreams() {
+    // Stream for current sensor values
+    _currentSensorStream = _firestore
+        .collection('eggcellent360')
+        .doc('current_sensors')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists) {
+        setState(() {
+          currentReadings = snapshot.data() ?? {};
+          connectionStatus = currentReadings['data_valid'] == true
+              ? 'Connected'
+              : 'Sensor Issues';
+        });
+      }
+    }, onError: (error) {
+      setState(() {
+        connectionStatus = 'Connection Error';
+      });
+      print('Current sensors stream error: $error');
+    });
+
+    // Stream for historical data (expand search window to find any old data)
+    final thirtyDaysAgo =
+        DateTime.now().subtract(Duration(days: 30)).millisecondsSinceEpoch;
+
+    // Try both approaches - first try the main collection, then try subcollection
+    _tryMainCollectionHistory(thirtyDaysAgo);
+  }
+
+  void _tryMainCollectionHistory(int thirtyDaysAgo) {
+    // The ESP8266 uploads data to individual documents with IDs starting with timestamp
+    // The docPath is "eggcellent360/sensor_history/" + docId, which means documents
+    // in the eggcellent360 collection with IDs starting with "sensor_history/"
+    _sensorStream =
+        _firestore.collection('eggcellent360').snapshots().listen((snapshot) {
+      List<SensorReading> readings = [];
+
+      print(
+          'Total documents in eggcellent360 collection: ${snapshot.docs.length}');
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final docId = doc.id;
+        print('Document ID: $docId, Fields: ${data.keys.toList()}');
+
+        // Check if this document is a sensor history document (ID starts with sensor_history/)
+        // AND contains sensor data (has timestamp and temperature fields)
+        if (docId.startsWith('sensor_history/') &&
+            data.containsKey('timestamp') &&
+            data.containsKey('temperature') &&
+            data.containsKey('device_id')) {
+          final timestamp = (data['timestamp'] as num?)?.toInt();
+          print('Found sensor data in doc $docId with timestamp: $timestamp');
+
+          // Include ALL historical data, regardless of age (remove time filter initially)
+          if (timestamp != null) {
+            readings.add(SensorReading(
+              timestamp: timestamp,
+              temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
+              humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
+              gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
+              lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
+              foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
+              arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
+            ));
+          }
+        }
+      }
+
+      print('Found ${readings.length} valid sensor readings');
+
+      // If no readings found with sensor_history/ prefix, check for any documents with sensor data
+      if (readings.isEmpty) {
+        print(
+            'No sensor_history/ documents found, checking all documents for sensor data...');
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          final docId = doc.id;
+
+          // Check if this document contains sensor data (has timestamp and temperature fields)
+          if (data.containsKey('timestamp') &&
+              data.containsKey('temperature') &&
+              data.containsKey('device_id')) {
+            final timestamp = (data['timestamp'] as num?)?.toInt();
+            print('Found sensor data in doc $docId with timestamp: $timestamp');
+
+            // Show when this data was from
+            if (timestamp != null) {
+              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+              final now = DateTime.now();
+              final daysDiff = now.difference(dataDate).inDays;
+              print('Data age: $daysDiff days ago ($dataDate)');
+            }
+
+            // Include ALL historical data, regardless of age
+            if (timestamp != null) {
+              readings.add(SensorReading(
+                timestamp: timestamp,
+                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
+                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
+                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
+                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
+                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
+                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
+              ));
+            }
+          }
+        }
+      }
+
+      print('Total found ${readings.length} valid sensor readings');
+
+      // If still no readings found in main collection, try subcollection
+      if (readings.isEmpty) {
+        print('No sensor data in main collection, trying subcollection...');
+        _trySubcollectionHistory(thirtyDaysAgo);
+        return;
+      }
+
+      setState(() {
+        // Sort by timestamp
+        readings.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        sensorReadings = readings;
+        isLoading = false;
+
+        // Show data age info
+        if (readings.isNotEmpty) {
+          final newestData =
+              DateTime.fromMillisecondsSinceEpoch(readings.last.timestamp);
+          final daysDiff = DateTime.now().difference(newestData).inDays;
+          connectionStatus =
+              'Found ${readings.length} records (newest: ${daysDiff}d ago)';
+        }
+      });
+    }, onError: (error) {
+      setState(() {
+        isLoading = false;
+        connectionStatus = 'Data Load Error';
+      });
+      print('Main collection sensor history stream error: $error');
+      // Try subcollection as fallback
+      _trySubcollectionHistory(thirtyDaysAgo);
+    });
+  }
+
+  void _trySubcollectionHistory(int thirtyDaysAgo) {
+    print('Trying subcollection approach...');
+    _sensorStream?.cancel(); // Cancel previous stream
+
+    // Based on the main.cpp file, the path "eggcellent360/sensor_history/" + docId
+    // likely creates documents in the subcollection 'sensor_history' under the 'eggcellent360' document
+    // But since eggcellent360 is a collection, the actual path should be interpreted differently
+
+    // The ESP8266 might be creating individual documents with timestamps as IDs
+    // Let's try to access the sensor_history document's subcollections
+    print('Trying direct sensor_history document subcollection...');
+
+    _sensorStream = _firestore
+        .collection('eggcellent360')
+        .doc('sensor_history')
+        .collection('data') // Try common subcollection names
+        .limit(10) // Get more documents to check
+        .snapshots()
+        .listen((snapshot) {
+      print(
+          'sensor_history/data subcollection documents found: ${snapshot.docs.length}');
+
+      if (snapshot.docs.isNotEmpty) {
+        // Check if any of these documents have sensor data
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          if (data.containsKey('timestamp')) {
+            final timestamp = (data['timestamp'] as num?)?.toInt();
+            if (timestamp != null) {
+              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+              final daysDiff = DateTime.now().difference(dataDate).inDays;
+              print(
+                  'Found subcollection data from $daysDiff days ago ($dataDate)');
+            }
+          }
+        }
+
+        _processSensorHistoryData(
+            snapshot, thirtyDaysAgo, 'sensor_history/data');
+      } else {
+        // Try another approach - maybe the timestamps are just document IDs directly
+        _tryTimestampDocuments(thirtyDaysAgo);
+      }
+    }, onError: (error) {
+      print('Error with sensor_history/data: $error');
+      _tryTimestampDocuments(thirtyDaysAgo);
+    });
+  }
+
+  void _tryTimestampDocuments(int thirtyDaysAgo) {
+    print('Trying timestamp-based document IDs approach...');
+
+    // The ESP8266 creates documents with timestamp IDs, let's try to query them directly
+    // We'll generate some timestamp IDs from different time periods to find any old data
+    List<String> timestampsToCheck = [];
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // Check various time periods - last 30 days
+    for (int days = 0; days < 30; days++) {
+      // Check a few timestamps per day
+      for (int hours = 0; hours < 24; hours += 6) {
+        final timestamp =
+            now - (days * 24 * 60 * 60 * 1000) - (hours * 60 * 60 * 1000);
+        timestampsToCheck.add(timestamp.toString());
+      }
+    }
+
+    print(
+        'Checking ${timestampsToCheck.length} potential timestamp document IDs...');
+
+    // Try to get documents directly by timestamp IDs (check first batch)
+    List<Future<DocumentSnapshot<Map<String, dynamic>>>> futures = [];
+
+    for (String timestamp in timestampsToCheck.take(10)) {
+      // Check first 10 to avoid too many concurrent requests
+      futures.add(_firestore.collection('eggcellent360').doc(timestamp).get());
+    }
+
+    Future.wait(futures).then((snapshots) {
+      List<SensorReading> readings = [];
+      int foundDocs = 0;
+
+      for (var snapshot in snapshots) {
+        if (snapshot.exists) {
+          foundDocs++;
+          final data = snapshot.data()!;
+          print(
+              'Found timestamp document: ${snapshot.id}, fields: ${data.keys.toList()}');
+
+          if (data.containsKey('temperature') &&
+              data.containsKey('timestamp')) {
+            final timestamp = (data['timestamp'] as num?)?.toInt();
+            if (timestamp != null) {
+              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+              final daysDiff = DateTime.now().difference(dataDate).inDays;
+              print('Found sensor data from $daysDiff days ago ($dataDate)');
+
+              readings.add(SensorReading(
+                timestamp: timestamp,
+                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
+                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
+                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
+                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
+                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
+                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
+              ));
+            }
+          }
+        }
+      }
+
+      print(
+          'Found $foundDocs timestamp documents, ${readings.length} with sensor data');
+
+      if (readings.isNotEmpty) {
+        setState(() {
+          sensorReadings = readings;
+          isLoading = false;
+          final daysDiff = DateTime.now()
+              .difference(
+                  DateTime.fromMillisecondsSinceEpoch(readings.last.timestamp))
+              .inDays;
+          connectionStatus =
+              'Found OLD data (${daysDiff}d ago) - Check ESP8266';
+        });
+      } else {
+        // Try one more approach - query by document ID pattern
+        _tryDocumentIdPattern(thirtyDaysAgo);
+      }
+    }).catchError((error) {
+      print('Error fetching timestamp documents: $error');
+      _tryDocumentIdPattern(thirtyDaysAgo);
+    });
+  }
+
+  void _tryDocumentIdPattern(int thirtyDaysAgo) {
+    print('Trying collection group query for any sensor_history data...');
+
+    // Try collection group query to find ANY sensor_history data, regardless of age
+    _firestore
+        .collectionGroup('sensor_history')
+        .limit(20) // Get more documents to check
+        .snapshots()
+        .listen((snapshot) {
+      print('Collection group query found: ${snapshot.docs.length} documents');
+
+      List<SensorReading> readings = [];
+
+      if (snapshot.docs.isNotEmpty) {
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          print(
+              'Collection group doc: ${doc.reference.path}, fields: ${data.keys.toList()}');
+
+          if (data.containsKey('timestamp') &&
+              data.containsKey('temperature')) {
+            final timestamp = (data['timestamp'] as num?)?.toInt();
+            if (timestamp != null) {
+              final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+              final daysDiff = DateTime.now().difference(dataDate).inDays;
+              print(
+                  'Found collection group data from $daysDiff days ago ($dataDate)');
+
+              readings.add(SensorReading(
+                timestamp: timestamp,
+                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
+                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
+                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
+                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
+                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
+                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
+              ));
+            }
+          }
+        }
+
+        if (readings.isNotEmpty) {
+          setState(() {
+            sensorReadings =
+                readings.take(100).toList(); // Limit to 100 most recent
+            sensorReadings.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            isLoading = false;
+            final daysDiff = DateTime.now()
+                .difference(DateTime.fromMillisecondsSinceEpoch(
+                    readings.last.timestamp))
+                .inDays;
+            connectionStatus =
+                'Found OLD data via CollectionGroup (${daysDiff}d ago)';
+          });
+          return;
+        }
+      }
+
+      // If still no data found, show helpful diagnostic information
+      _finalFallback();
+    }, onError: (error) {
+      print('Collection group query error: $error');
+      _finalFallback();
+    });
+  }
+
+  void _finalFallback() {
+    print(
+        'All approaches exhausted - checking if ESP8266 is uploading data at all...');
+
+    // Let's create a comprehensive check for any documents that might contain sensor data
+    // This will help diagnose if the ESP8266 is uploading data anywhere
+
+    // First, let's also try to access Firebase using collectionGroup for any sensor_history
+    _firestore.collectionGroup('sensor_history').limit(10).snapshots().listen(
+        (snapshot) {
+      print(
+          'Collection group sensor_history found ${snapshot.docs.length} documents');
+
+      if (snapshot.docs.isNotEmpty) {
+        for (var doc in snapshot.docs) {
+          print(
+              'Collection group doc: ${doc.reference.path}, fields: ${doc.data().keys.toList()}');
+        }
+
+        // If we found documents via collection group, use them
+        _firestore
+            .collectionGroup('sensor_history')
+            .orderBy('timestamp', descending: false)
+            .limit(100)
+            .snapshots()
+            .listen((fullSnapshot) {
+          setState(() {
+            sensorReadings = fullSnapshot.docs.map((doc) {
+              final data = doc.data();
+              return SensorReading(
+                timestamp: (data['timestamp'] as num?)?.toInt() ??
+                    DateTime.now().millisecondsSinceEpoch,
+                temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
+                humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
+                gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
+                lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
+                foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
+                arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
+              );
+            }).toList();
+            isLoading = false;
+            connectionStatus = 'Historical Data Found via Collection Group';
+          });
+        });
+
+        return;
+      }
+
+      // If still no data found, show helpful diagnostic information
+      _showDiagnosticInfo();
+    }, onError: (error) {
+      print('Collection group query error: $error');
+      _showDiagnosticInfo();
+    });
+  }
+
+  void _showDiagnosticInfo() {
+    print('=== DIAGNOSTIC INFORMATION ===');
+    print('1. ESP8266 appears to be updating current_sensors successfully');
+    print('2. No historical sensor data found in any expected location');
+    print('3. Possible issues:');
+    print('   - ESP8266 uploadSensorDataToFirestore() function may be failing');
+    print('   - Firebase permissions issue for creating new documents');
+    print('   - Network connectivity issues on ESP8266');
+    print('   - ESP8266 may not be calling the upload function');
+    print(
+        '4. Current_sensors document exists, so basic Firebase connection works');
+    print('5. Check ESP8266 serial output for upload errors');
+    print('===============================');
+
+    setState(() {
+      isLoading = false;
+      connectionStatus = 'ESP8266 Not Uploading History';
+
+      // Generate some sample data for demonstration purposes
+      _generateSampleDataForTesting();
+    });
+  }
+
+  void _generateSampleDataForTesting() {
+    print('Generating sample sensor data for testing the charts...');
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    List<SensorReading> sampleData = [];
+
+    // Generate sample data for the last 24 hours
+    for (int i = 0; i < 24; i++) {
+      final timestamp = now - (i * 60 * 60 * 1000); // Go back i hours
+
+      // Generate realistic sensor values with some variation
+      final temp = 28.0 +
+          (5.0 * (0.5 - (i % 12) / 24.0)) +
+          (2.0 * (0.5 - (i % 3) / 6.0));
+      final humidity = 55.0 + (10.0 * (0.5 - (i % 8) / 16.0));
+      final gas = 300.0 + (100.0 * (0.5 - (i % 5) / 10.0));
+      final light = 400.0 + (200.0 * (0.5 - (i % 6) / 12.0));
+      final food = 500.0 + (200.0 * (0.5 - (i % 10) / 20.0));
+
+      sampleData.add(SensorReading(
+        timestamp: timestamp,
+        temperature: temp,
+        humidity: humidity,
+        gasLevel: gas,
+        lightLevel: light,
+        foodLevel: food,
+        arduinoDataValid: true,
+      ));
+    }
+
+    // Sort by timestamp (oldest first)
+    sampleData.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    setState(() {
+      sensorReadings = sampleData;
+      connectionStatus = 'Sample Data (ESP8266 Issue)';
+    });
+
+    print(
+        'Generated ${sampleData.length} sample sensor readings for chart display');
+  }
+
+  void _processSensorHistoryData(QuerySnapshot<Map<String, dynamic>> snapshot,
+      int thirtyDaysAgo, String source) {
+    print('Processing sensor data from $source...');
+
+    List<SensorReading> readings = [];
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      print('$source doc: ${doc.id}, fields: ${data.keys.toList()}');
+
+      if (data.containsKey('temperature') && data.containsKey('timestamp')) {
+        final timestamp = (data['timestamp'] as num?)?.toInt();
+        if (timestamp != null) {
+          final dataDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
+          final daysDiff = DateTime.now().difference(dataDate).inDays;
+          print('$source data from $daysDiff days ago ($dataDate)');
+
+          readings.add(SensorReading(
+            timestamp: timestamp,
+            temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
+            humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
+            gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
+            lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
+            foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
+            arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
+          ));
+        }
+      }
+    }
+
+    if (readings.isNotEmpty) {
+      print('Found ${readings.length} sensor readings in $source');
+      // Get all data from this source (remove time filter)
+      _firestore
+          .collection('eggcellent360')
+          .doc('sensor_history')
+          .collection('data')
+          .orderBy('timestamp', descending: false)
+          .limit(100)
+          .snapshots()
+          .listen((fullSnapshot) {
+        setState(() {
+          sensorReadings = fullSnapshot.docs.map((doc) {
+            final data = doc.data();
+            return SensorReading(
+              timestamp: (data['timestamp'] as num?)?.toInt() ??
+                  DateTime.now().millisecondsSinceEpoch,
+              temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
+              humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
+              gasLevel: (data['gas_level'] as num?)?.toDouble() ?? 0.0,
+              lightLevel: (data['light_level'] as num?)?.toDouble() ?? 0.0,
+              foodLevel: (data['food_level'] as num?)?.toDouble() ?? 0.0,
+              arduinoDataValid: data['arduino_data_valid'] as bool? ?? false,
+            );
+          }).toList();
+          isLoading = false;
+
+          // Show data age
+          if (sensorReadings.isNotEmpty) {
+            final daysDiff = DateTime.now()
+                .difference(DateTime.fromMillisecondsSinceEpoch(
+                    sensorReadings.last.timestamp))
+                .inDays;
+            connectionStatus =
+                'Historical Data Loaded from $source (newest: ${daysDiff}d ago)';
+          } else {
+            connectionStatus = 'Historical Data Loaded from $source';
+          }
+        });
+      });
+    } else {
+      _tryTimestampDocuments(thirtyDaysAgo);
+    }
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _dataTimer?.cancel();
+    _sensorStream?.cancel();
+    _currentSensorStream?.cancel();
     super.dispose();
+  }
+
+  // Convert timestamp to hours for chart
+  List<FlSpot> _getChartData(String dataType) {
+    if (sensorReadings.isEmpty) return [];
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const maxPoints = 50; // Limit points for performance
+
+    // Take recent readings and sample them if too many
+    List<SensorReading> dataToChart = sensorReadings;
+    if (dataToChart.length > maxPoints) {
+      final step = dataToChart.length ~/ maxPoints;
+      dataToChart = dataToChart.where((reading) {
+        final index = dataToChart.indexOf(reading);
+        return index % step == 0;
+      }).toList();
+    }
+
+    return dataToChart.map((reading) {
+      final hoursAgo = (now - reading.timestamp) / (1000 * 60 * 60);
+      final value = _getValueForDataType(reading, dataType);
+      return FlSpot(24 - hoursAgo, value);
+    }).toList();
+  }
+
+  double _getValueForDataType(SensorReading reading, String dataType) {
+    switch (dataType) {
+      case 'temperature':
+        return reading.temperature;
+      case 'humidity':
+        return reading.humidity;
+      case 'gas':
+        return reading.gasLevel;
+      case 'light':
+        return reading.lightLevel;
+      case 'food':
+        return reading.foodLevel;
+      default:
+        return 0.0;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF0D1117), // Dark GitHub-like background
+      backgroundColor: Color(0xFF0D1117),
       appBar: AppBar(
-        title: Text(
-          'Poultry Environment Monitor',
-          style: GoogleFonts.poppins(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
+        title: Column(
+          children: [
+            Text(
+              'Eggcellent 360 Monitor',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              connectionStatus,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: connectionStatus == 'Connected'
+                    ? Colors.green
+                    : Colors.orange,
+              ),
+            ),
+          ],
         ),
-        backgroundColor: Color(0xFF161B22), // Dark AppBar
+        backgroundColor: Color(0xFF161B22),
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: Color(0xFF58A6FF)),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              isLoading ? Icons.hourglass_empty : Icons.refresh,
+              color: Color(0xFF58A6FF),
+            ),
+            onPressed: isLoading
+                ? null
+                : () {
+                    setState(() {
+                      isLoading = true;
+                    });
+                    // Reinitialize streams to refresh data
+                    _sensorStream?.cancel();
+                    _currentSensorStream?.cancel();
+                    _initializeFirebaseStreams();
+                  },
+          ),
+        ],
       ),
       body: FadeTransition(
         opacity: _fadeAnimation,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with current readings
-              _buildHeaderSection(),
-              SizedBox(height: 24),
-
-              // Charts Grid
-              _buildChartsGrid(),
-
-              // Bottom navigation or action buttons
-              SizedBox(height: 20),
-              _buildActionButtons(context),
-            ],
-          ),
-        ),
+        child: isLoading
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFF58A6FF)),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading sensor data...',
+                      style: GoogleFonts.poppins(color: Colors.white),
+                    ),
+                  ],
+                ),
+              )
+            : SingleChildScrollView(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeaderSection(),
+                    SizedBox(height: 24),
+                    _buildChartsGrid(),
+                    SizedBox(height: 20),
+                    _buildActionButtons(context),
+                  ],
+                ),
+              ),
       ),
     );
   }
 
   Widget _buildHeaderSection() {
+    final temp = currentReadings['temperature']?.toDouble() ?? 0.0;
+    final humidity = currentReadings['humidity']?.toDouble() ?? 0.0;
+    final gas = currentReadings['gas_level']?.toDouble() ?? 0.0;
+    final light = currentReadings['light_level']?.toDouble() ?? 0.0;
+    final food = currentReadings['food_level']?.toDouble() ?? 0.0;
+    final lastUpdate = currentReadings['last_update'];
+
+    String timeAgo = 'Unknown';
+    if (lastUpdate != null) {
+      final diff = DateTime.now().millisecondsSinceEpoch - (lastUpdate as int);
+      final minutes = diff ~/ (1000 * 60);
+      timeAgo = minutes < 1 ? 'Just now' : '${minutes}m ago';
+    }
+
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF238636), Color(0xFF196127)], // Dark green gradient
+          colors: connectionStatus == 'Connected'
+              ? [Color(0xFF238636), Color(0xFF196127)]
+              : [Color(0xFFBD2C00), Color(0xFF8B2635)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF238636).withOpacity(0.3),
+            color: (connectionStatus == 'Connected'
+                    ? Color(0xFF238636)
+                    : Color(0xFFBD2C00))
+                .withOpacity(0.3),
             blurRadius: 15,
             offset: Offset(0, 8),
           ),
@@ -151,24 +771,40 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
             children: [
               Icon(Icons.dashboard, color: Colors.white, size: 24),
               SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Live Readings',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
               Text(
-                'Current Readings',
+                timeAgo,
                 style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  fontSize: 12,
+                  color: Colors.white.withOpacity(0.8),
                 ),
               ),
             ],
           ),
           SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              _buildCurrentReading('${temperatureData.last.value.toStringAsFixed(1)}°C', 'Temp', Icons.thermostat),
-              _buildCurrentReading('${humidityData.last.value.toStringAsFixed(1)}%', 'Humidity', Icons.water_drop),
-              _buildCurrentReading('${gasData.last.value.toStringAsFixed(0)} ppm', 'Gas', Icons.air),
-              _buildCurrentReading('${ammoniaData.last.value.toStringAsFixed(1)} ppm', 'NH₃', Icons.science),
+              _buildCurrentReading(
+                  '${temp.toStringAsFixed(1)}°C', 'Temp', Icons.thermostat),
+              _buildCurrentReading('${humidity.toStringAsFixed(1)}%',
+                  'Humidity', Icons.water_drop),
+              _buildCurrentReading(
+                  '${gas.toStringAsFixed(0)}', 'Gas', Icons.air),
+              _buildCurrentReading(
+                  '${light.toStringAsFixed(0)}', 'Light', Icons.wb_sunny),
+              _buildCurrentReading(
+                  '${food.toStringAsFixed(0)}', 'Food', Icons.dining),
             ],
           ),
         ],
@@ -178,30 +814,36 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
 
   Widget _buildCurrentReading(String value, String label, IconData icon) {
     return Container(
-      padding: EdgeInsets.all(8),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
-      child: Column(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white, size: 24),
-          SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.white.withOpacity(0.8),
-            ),
+          Icon(icon, color: Colors.white, size: 20),
+          SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.white.withOpacity(0.8),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -216,8 +858,8 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
             Expanded(
               child: _buildChartCard(
                 'Temperature (°C)',
-                temperatureData,
-                Color(0xFFFF7B72), // Bright red for dark theme
+                'temperature',
+                Color(0xFFFF7B72),
                 Icons.thermostat,
               ),
             ),
@@ -225,8 +867,8 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
             Expanded(
               child: _buildChartCard(
                 'Humidity (%)',
-                humidityData,
-                Color(0xFF79C0FF), // Bright blue for dark theme
+                'humidity',
+                Color(0xFF79C0FF),
                 Icons.water_drop,
               ),
             ),
@@ -237,34 +879,47 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
           children: [
             Expanded(
               child: _buildChartCard(
-                'Gas Level (ppm)',
-                gasData,
-                Color(0xFFE3B341), // Golden yellow for dark theme
+                'Gas Level',
+                'gas',
+                Color(0xFFE3B341),
                 Icons.air,
               ),
             ),
             SizedBox(width: 12),
             Expanded(
               child: _buildChartCard(
-                'Ammonia (ppm)',
-                ammoniaData,
-                Color(0xFFD2A8FF), // Purple for dark theme
-                Icons.science,
+                'Light Level',
+                'light',
+                Color(0xFFD2A8FF),
+                Icons.wb_sunny,
               ),
             ),
           ],
+        ),
+        SizedBox(height: 16),
+        _buildChartCard(
+          'Food Level',
+          'food',
+          Color(0xFF56D364),
+          Icons.dining,
+          fullWidth: true,
         ),
       ],
     );
   }
 
-  Widget _buildChartCard(String title, List<SensorData> data,
-      Color color, IconData icon) {
+  Widget _buildChartCard(
+      String title, String dataType, Color color, IconData icon,
+      {bool fullWidth = false}) {
+    final chartData = _getChartData(dataType);
+    final dataCount = sensorReadings.length;
+
     return Container(
+      width: fullWidth ? double.infinity : null,
       height: 280,
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Color(0xFF21262D), // Dark card background
+        color: Color(0xFF21262D),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Color(0xFF30363D), width: 1),
         boxShadow: [
@@ -290,99 +945,119 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
               ),
               SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFF0F6FC), // Light text for dark theme
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFF0F6FC),
+                      ),
+                    ),
+                    Text(
+                      '$dataCount data points',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: Color(0xFF8B949E),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
           SizedBox(height: 16),
           Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: 1,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: Color(0xFF30363D), // Dark grid lines
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 35,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: GoogleFonts.poppins(
-                            fontSize: 10,
-                            color: Color(0xFF8B949E), // Muted text
-                          ),
-                        );
-                      },
+            child: chartData.isEmpty
+                ? Center(
+                    child: Text(
+                      'No data available',
+                      style: GoogleFonts.poppins(
+                        color: Color(0xFF8B949E),
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 25,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          'D${value.toInt()}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 9,
-                            color: Color(0xFF8B949E), // Muted text
+                  )
+                : LineChart(
+                    LineChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: 1,
+                        getDrawingHorizontalLine: (value) {
+                          return FlLine(
+                            color: Color(0xFF30363D),
+                            strokeWidth: 1,
+                          );
+                        },
+                      ),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 35,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                value.toInt().toString(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: Color(0xFF8B949E),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: data
-                        .map((point) => FlSpot(point.day.toDouble(), point.value))
-                        .toList(),
-                    isCurved: true,
-                    color: color,
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (spot, percent, barData, index) {
-                        return FlDotCirclePainter(
-                          radius: 4,
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 25,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                '${value.toInt()}h',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  color: Color(0xFF8B949E),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        rightTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: chartData,
+                          isCurved: true,
                           color: color,
-                          strokeWidth: 2,
-                          strokeColor: Color(0xFF21262D), // Dark stroke
-                        );
-                      },
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: color.withOpacity(0.15),
+                          barWidth: 3,
+                          isStrokeCapRound: true,
+                          dotData: FlDotData(
+                            show: chartData.length < 20,
+                            getDotPainter: (spot, percent, barData, index) {
+                              return FlDotCirclePainter(
+                                radius: 3,
+                                color: color,
+                                strokeWidth: 2,
+                                strokeColor: Color(0xFF21262D),
+                              );
+                            },
+                          ),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: color.withOpacity(0.15),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -395,14 +1070,19 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
         Expanded(
           child: ElevatedButton.icon(
             onPressed: () {
-              // Add refresh functionality
               _animationController.reset();
               _animationController.forward();
+              setState(() {
+                isLoading = true;
+              });
+              _sensorStream?.cancel();
+              _currentSensorStream?.cancel();
+              _initializeFirebaseStreams();
             },
             icon: Icon(Icons.refresh, size: 18),
             label: Text('Refresh Data'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF238636), // Dark green
+              backgroundColor: Color(0xFF238636),
               foregroundColor: Colors.white,
               padding: EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
@@ -416,13 +1096,11 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
         SizedBox(width: 12),
         Expanded(
           child: OutlinedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(context),
             icon: Icon(Icons.home, size: 18),
             label: Text('Back to Home'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Color(0xFF58A6FF), // Blue accent
+              foregroundColor: Color(0xFF58A6FF),
               side: BorderSide(color: Color(0xFF58A6FF)),
               backgroundColor: Color(0xFF58A6FF).withOpacity(0.1),
               padding: EdgeInsets.symmetric(vertical: 12),
@@ -437,9 +1115,22 @@ class _GraphDataState extends State<GraphData> with TickerProviderStateMixin {
   }
 }
 
-class SensorData {
-  final int day;
-  final double value;
+class SensorReading {
+  final int timestamp;
+  final double temperature;
+  final double humidity;
+  final double gasLevel;
+  final double lightLevel;
+  final double foodLevel;
+  final bool arduinoDataValid;
 
-  SensorData(this.day, this.value);
+  SensorReading({
+    required this.timestamp,
+    required this.temperature,
+    required this.humidity,
+    required this.gasLevel,
+    required this.lightLevel,
+    required this.foodLevel,
+    required this.arduinoDataValid,
+  });
 }

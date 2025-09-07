@@ -4,6 +4,7 @@ import 'package:poultry_app/newAuth/order/trackorder.dart';
 import 'package:poultry_app/screens/mainscreens/filter.dart';
 import 'package:poultry_app/screens/mainscreens/manual_controls_page.dart';
 import 'package:poultry_app/screens/mainscreens/postad.dart';
+import 'package:poultry_app/screens/mainscreens/system_logs_page.dart';
 import 'package:poultry_app/screens/mainscreens/threshold_config_screen.dart';
 import 'package:poultry_app/screens/mainscreens/todayrate.dart';
 import 'package:poultry_app/widgets/generalappbar.dart';
@@ -748,6 +749,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         'icon': Icons.videocam_rounded,
         'gradient': [const Color(0xFF667eea), const Color(0xFF764ba2)],
         'onPressed': () => NextScreen(context, const ESP32CameraStreamPage()),
+      });
+      buttons.add({
+        'text': "System Logs",
+        'icon': Icons.history,
+        'gradient': [const Color(0xFF11998e), const Color(0xFF38ef7d)],
+        'onPressed': () => NextScreen(context, const SystemLogsPage()),
       });
     }
 

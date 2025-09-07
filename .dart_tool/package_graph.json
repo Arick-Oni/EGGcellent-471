@@ -19,6 +19,7 @@
         "flutter_switch",
         "form_field_validator",
         "google_fonts",
+        "intl",
         "percent_indicator",
         "pinput",
         "shared_preferences",
@@ -54,6 +55,15 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "intl",
+      "version": "0.18.1",
+      "dependencies": [
+        "clock",
+        "meta",
+        "path"
       ]
     },
     {
@@ -156,7 +166,7 @@
     },
     {
       "name": "table_calendar",
-      "version": "3.2.0",
+      "version": "3.0.9",
       "dependencies": [
         "flutter",
         "intl",
@@ -546,15 +556,6 @@
       "version": "0.2.1",
       "dependencies": [
         "flutter"
-      ]
-    },
-    {
-      "name": "intl",
-      "version": "0.20.2",
-      "dependencies": [
-        "clock",
-        "meta",
-        "path"
       ]
     },
     {
