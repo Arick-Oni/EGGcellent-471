@@ -282,11 +282,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                           ),
                                         ),
                                         const SizedBox(height: 12),
-                                        // Add rewards badge here
-                                        FutureBuilder<User?>(
-                                          future: FirebaseAuth.instance
-                                              .authStateChanges()
-                                              .first,
+                                        // Add rewards badge here with real-time auth listening
+                                        StreamBuilder<User?>(
+                                          stream: FirebaseAuth.instance
+                                              .authStateChanges(),
                                           builder: (context, snapshot) {
                                             if (snapshot.hasData &&
                                                 snapshot.data != null) {
@@ -804,17 +803,32 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildDesktopGrid(List<Map<String, dynamic>> buttons) {
+    // For buyers, use different layout for compact rectangular buttons
+    int crossAxisCount;
+    double aspectRatio;
+    double maxWidth;
+
+    if (isBuyerLoggedIn == true) {
+      crossAxisCount = 8; // 8 columns for bigger screen (desktop/fullscreen)
+      aspectRatio = 2.2; // Compact rectangular shape
+      maxWidth = 1400; // Wide layout for 8 columns
+    } else {
+      crossAxisCount = 4; // Original farmer layout
+      aspectRatio = 1.1;
+      maxWidth = 800; // Centered, more compact layout for farmers
+    }
+
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 800),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         child: GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            crossAxisSpacing: 20,
-            mainAxisSpacing: 20,
-            childAspectRatio: 1.1,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: isBuyerLoggedIn == true ? 6 : 20,
+            mainAxisSpacing: isBuyerLoggedIn == true ? 8 : 20,
+            childAspectRatio: aspectRatio,
           ),
           itemCount: buttons.length,
           itemBuilder: (context, index) {
@@ -827,13 +841,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   scale: animationValue,
                   child: Opacity(
                     opacity: animationValue,
-                    child: _buildEnhancedActionButton(
-                      buttons[index]['text'],
-                      buttons[index]['icon'],
-                      buttons[index]['gradient'],
-                      buttons[index]['onPressed'],
-                      index,
-                    ),
+                    child: isBuyerLoggedIn == true
+                        ? _buildCompactActionButton(
+                            buttons[index]['text'],
+                            buttons[index]['icon'],
+                            buttons[index]['gradient'],
+                            buttons[index]['onPressed'],
+                            index,
+                          )
+                        : _buildEnhancedActionButton(
+                            buttons[index]['text'],
+                            buttons[index]['icon'],
+                            buttons[index]['gradient'],
+                            buttons[index]['onPressed'],
+                            index,
+                          ),
                   ),
                 );
               },
@@ -845,14 +867,33 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildMobileGrid(List<Map<String, dynamic>> buttons) {
+    // For buyers, use more columns to make buttons smaller and fit in fewer rows
+    int crossAxisCount;
+    double childAspectRatio;
+
+    if (isBuyerLoggedIn == true) {
+      // Buyer layout: compact rounded rectangle buttons
+      if (ResponsiveHelper.isTablet(context)) {
+        crossAxisCount = 6; // 6 columns on tablet for compact buttons
+        childAspectRatio = 2.2; // Moderately wide rectangular shape
+      } else {
+        crossAxisCount = 4; // 4 columns on mobile for compact buttons
+        childAspectRatio = 1.8; // Compact rectangular shape for mobile
+      }
+    } else {
+      // Farmer layout: keep original size
+      crossAxisCount = ResponsiveHelper.isTablet(context) ? 3 : 2;
+      childAspectRatio = ResponsiveHelper.isTablet(context) ? 1.2 : 1.1;
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: ResponsiveHelper.isTablet(context) ? 3 : 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: ResponsiveHelper.isTablet(context) ? 1.2 : 1.1,
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: isBuyerLoggedIn == true ? 4 : 16,
+        mainAxisSpacing: isBuyerLoggedIn == true ? 6 : 16,
+        childAspectRatio: childAspectRatio,
       ),
       itemCount: buttons.length,
       itemBuilder: (context, index) {
@@ -865,13 +906,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               scale: animationValue,
               child: Opacity(
                 opacity: animationValue,
-                child: _buildEnhancedActionButton(
-                  buttons[index]['text'],
-                  buttons[index]['icon'],
-                  buttons[index]['gradient'],
-                  buttons[index]['onPressed'],
-                  index,
-                ),
+                child: isBuyerLoggedIn == true
+                    ? _buildCompactActionButton(
+                        buttons[index]['text'],
+                        buttons[index]['icon'],
+                        buttons[index]['gradient'],
+                        buttons[index]['onPressed'],
+                        index,
+                      )
+                    : _buildEnhancedActionButton(
+                        buttons[index]['text'],
+                        buttons[index]['icon'],
+                        buttons[index]['gradient'],
+                        buttons[index]['onPressed'],
+                        index,
+                      ),
               ),
             );
           },
@@ -1005,6 +1054,168 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCompactActionButton(
+    String text,
+    IconData icon,
+    List<Color> gradientColors,
+    VoidCallback onPressed,
+    int index,
+  ) {
+    final isDesktop = ResponsiveHelper.isDesktop(context);
+    final isTablet = ResponsiveHelper.isTablet(context);
+
+    // Modern, sleek sizing for 4/8 column layout
+    final containerHeight = isDesktop ? 50.0 : (isTablet ? 45.0 : 40.0);
+    final horizontalPadding = isDesktop ? 10.0 : (isTablet ? 8.0 : 6.0);
+    final verticalPadding = isDesktop ? 8.0 : (isTablet ? 6.0 : 5.0);
+    final iconSize = isDesktop ? 16.0 : (isTablet ? 14.0 : 12.0);
+    final fontSize = isDesktop ? 10.0 : (isTablet ? 9.0 : 8.0);
+    final borderRadius = isDesktop ? 16.0 : (isTablet ? 14.0 : 12.0);
+    final spacingWidth = isDesktop ? 8.0 : (isTablet ? 6.0 : 4.0);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 300),
+        tween: Tween(begin: 1.0, end: 1.0),
+        builder: (context, scale, child) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: containerHeight,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(borderRadius),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  gradientColors.first.withOpacity(0.9),
+                  gradientColors.last.withOpacity(0.95),
+                ],
+              ),
+              boxShadow: [
+                // Modern elevated shadow
+                BoxShadow(
+                  color: gradientColors.first.withOpacity(0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                  spreadRadius: 0,
+                ),
+                // Subtle depth shadow
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+              // Modern border
+              border: Border.all(
+                color: Colors.white.withOpacity(0.15),
+                width: 1.2,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(borderRadius - 1),
+              child: Container(
+                decoration: BoxDecoration(
+                  // Modern glassmorphism effect
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.2),
+                      Colors.white.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(borderRadius - 1),
+                    splashColor: Colors.white.withOpacity(0.2),
+                    highlightColor: Colors.white.withOpacity(0.1),
+                    onTap: onPressed,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPadding,
+                        vertical: verticalPadding,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Modern icon with backdrop
+                          Container(
+                            padding: EdgeInsets.all(isDesktop ? 6.0 : 4.0),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
+                                width: 0.8,
+                              ),
+                              // Subtle inner shadow effect
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              icon,
+                              size: iconSize,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.4),
+                                  blurRadius: 3,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          SizedBox(width: spacingWidth),
+
+                          // Modern text with better typography
+                          Expanded(
+                            child: Text(
+                              text,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: fontSize,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                letterSpacing: 0.3,
+                                height: 1.2,
+                                shadows: [
+                                  Shadow(
+                                    offset: const Offset(0, 1),
+                                    blurRadius: 3,
+                                    color: Colors.black.withOpacity(0.5),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1354,6 +1565,57 @@ class RewardsPointsBadge extends StatelessWidget {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: doc.snapshots(),
       builder: (context, snap) {
+        // Handle error state
+        if (snap.hasError) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.red.withOpacity(0.5)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_rounded, size: 16, color: Colors.red),
+                SizedBox(width: 6),
+                Text(
+                  'Error',
+                  style:
+                      TextStyle(color: Colors.red, fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Handle loading state only for initial connection
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.greenAccent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.emoji_events_rounded,
+                    size: 16, color: Colors.greenAccent),
+                SizedBox(width: 6),
+                Text(
+                  '0 pts',
+                  style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        }
+
         final pts = (snap.data?.data()?['totalPoints'] as num?)?.toInt() ?? 0;
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

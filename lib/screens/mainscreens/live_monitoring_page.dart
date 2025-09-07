@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:poultry_app/screens/mainscreens/manual_controls_page.dart';
+import 'package:poultry_app/Responsive_helper.dart';
 
 class LiveMonitoringPage extends StatefulWidget {
   const LiveMonitoringPage({Key? key}) : super(key: key);
@@ -298,7 +299,11 @@ class _LiveMonitoringPageState extends State<LiveMonitoringPage> {
 
                 // Environment Cards Grid
                 GridView.count(
-                  crossAxisCount: 2,
+                  crossAxisCount: ResponsiveHelper.isMobile(context)
+                      ? 2
+                      : ResponsiveHelper.isTablet(context)
+                          ? 3
+                          : 6,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 16,

@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:poultry_app/utils/constants.dart';
@@ -20,7 +19,14 @@ class PostAdPage extends StatefulWidget {
 }
 
 class _PostAdPageState extends State<PostAdPage> {
-  List<String> list = ["Broiler", "Deshi", "Eggs", "Hatching Eggs", "Chicks", "Ducks"];
+  List<String> list = [
+    "Broiler",
+    "Deshi",
+    "Eggs",
+    "Hatching Eggs",
+    "Chicks",
+    "Ducks"
+  ];
   String? selectedCategory;
 
   final _inventoryService = FarmerInventoryService();
@@ -65,16 +71,17 @@ class _PostAdPageState extends State<PostAdPage> {
       userId: FirebaseAuth.instance.currentUser!.uid,
       type: selectedCategory!,
       name: nameController.text,
-      quantity: int.tryParse(quantityController.text) ?? 0,  // ✅ save as int
-      price: double.tryParse(priceController.text) ?? 0.0,   // ✅ save as number
+      quantity: int.tryParse(quantityController.text) ?? 0, // ✅ save as int
+      price: double.tryParse(priceController.text) ?? 0.0, // ✅ save as number
       contactNumber: contactController.text,
       city: cityController.text,
       region: regionController.text,
       description: descriptionController.text,
     );
 
-
-    await FirebaseFirestore.instance.collection('collectionofall').add(ad.toMap());
+    await FirebaseFirestore.instance
+        .collection('collectionofall')
+        .add(ad.toMap());
 
     showDialog(
       context: context,
@@ -125,57 +132,14 @@ class _PostAdPageState extends State<PostAdPage> {
     final widthFactor = isDesktop ? 0.6 : 1.0;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 25),
+      padding:
+          EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 25),
       child: Center(
         child: SizedBox(
           width: MediaQuery.of(context).size.width * widthFactor,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Upload Image Section
-              Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black38,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: DottedBorder(
-                    borderType: BorderType.RRect,
-                    dashPattern: const [8, 5],
-                    strokeWidth: 2,
-                    color: Colors.grey[500]!,
-                    radius: const Radius.circular(15),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: isDesktop ? 180 : 140,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.file_upload_outlined, size: isDesktop ? 60 : 50, color: Colors.grey[500]),
-                          const SizedBox(height: 10),
-                          Text(
-                            "Upload image",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: isDesktop ? 16 : 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 25),
-
               // Dropdown
               CustomDropdown(
                 list: list,
@@ -188,22 +152,30 @@ class _PostAdPageState extends State<PostAdPage> {
               // TextFields
               CustomTextField(controller: nameController, hintText: "Name"),
               const SizedBox(height: 15),
-              CustomTextField(controller: quantityController, hintText: "Quantity"),
+              CustomTextField(
+                  controller: quantityController, hintText: "Quantity"),
               const SizedBox(height: 15),
-              CustomTextField(controller: priceController, hintText: "Price (per unit)"),
+              CustomTextField(
+                  controller: priceController, hintText: "Price (per unit)"),
               const SizedBox(height: 15),
-              CustomTextField(controller: contactController, hintText: "Contact Number"),
+              CustomTextField(
+                  controller: contactController, hintText: "Contact Number"),
               const SizedBox(height: 15),
 
               Row(
                 children: [
-                  Expanded(child: CustomTextField(controller: cityController, hintText: "City")),
+                  Expanded(
+                      child: CustomTextField(
+                          controller: cityController, hintText: "City")),
                   const SizedBox(width: 20),
-                  Expanded(child: CustomTextField(controller: regionController, hintText: "Region")),
+                  Expanded(
+                      child: CustomTextField(
+                          controller: regionController, hintText: "Region")),
                 ],
               ),
               const SizedBox(height: 15),
-              CustomTextField(controller: descriptionController, hintText: "Description"),
+              CustomTextField(
+                  controller: descriptionController, hintText: "Description"),
               const SizedBox(height: 25),
 
               // Post Button
