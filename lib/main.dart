@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:poultry_app/screens/services/notification_service.dart';
+// import 'package:poultry_app/screens/services/notification_service.dart';
 import 'package:poultry_app/screens/start/splash.dart';
 import 'package:poultry_app/screens/bottomnav.dart';
 
@@ -81,10 +81,7 @@ class MyApp extends StatelessWidget {
         '/games': (_) => const GamesHubPage(),
       },
       builder: (context, child) {
-        // Initialize notification service after MaterialApp context is available
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          NotificationService().initialize(context);
-        });
+        // ...existing code...
         return child!;
       },
       onUnknownRoute: (_) => MaterialPageRoute(
