@@ -43,16 +43,43 @@ class _ChooseRolePageState extends State<ChooseRolePage>
   }
 
   void _initializeVideo() async {
-    _videoController = VideoPlayerController.asset('assets/videos/vdo.mp4');
+    try {
+      // Try asset approach first (works locally)
+      _videoController = VideoPlayerController.asset('assets/videos/vdo.mp4');
+      await _videoController.initialize();
 
-    await _videoController.initialize();
-    _videoController.setLooping(true);
-    _videoController.setVolume(0.0); // Mute the video
-    _videoController.play();
+      _videoController.setLooping(true);
+      _videoController.setVolume(0.0);
+      _videoController.play();
 
-    setState(() {
-      _isVideoInitialized = true;
-    });
+      setState(() {
+        _isVideoInitialized = true;
+      });
+
+      print('Video loaded from assets');
+    } catch (e) {
+      print('Asset video failed, trying web directory: $e');
+      try {
+        // Fallback to web directory (works on Vercel)
+        _videoController = VideoPlayerController.network('/videos/vdo.mp4');
+        await _videoController.initialize();
+
+        _videoController.setLooping(true);
+        _videoController.setVolume(0.0);
+        _videoController.play();
+
+        setState(() {
+          _isVideoInitialized = true;
+        });
+
+        print('Video loaded from web directory');
+      } catch (e2) {
+        print('Both video loading methods failed: $e2');
+        setState(() {
+          _isVideoInitialized = false;
+        });
+      }
+    }
   }
 
   @override
