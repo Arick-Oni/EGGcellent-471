@@ -30,30 +30,30 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _adFuture = _fetchAd();
-    
+
     // Initialize animations
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-    
+
     _pulseController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
-    
+
     _slideAnimation = Tween<double>(begin: 30.0, end: 0.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
     );
-    
+
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
     );
-    
+
     _animationController.forward();
     _pulseController.repeat(reverse: true);
   }
@@ -68,7 +68,7 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
   Future<AdModel> _fetchAd() async {
     try {
       final doc =
-      await _firestore.collection('collectionofall').doc(widget.adId).get();
+          await _firestore.collection('collectionofall').doc(widget.adId).get();
       if (doc.exists) {
         return AdModel.fromMap(doc.data()!, doc.id);
       } else {
@@ -82,12 +82,12 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     List<Map<String, String>> sell = [
-      {"image": "assets/images/birds.png", "name": "Broiler"},
-      {"image": "assets/images/deshi.png", "name": "Deshi"},
-      {"image": "assets/images/egg.png", "name": "Eggs"},
-      {"image": "assets/images/eggs.png", "name": "Hatching Eggs"},
+      {"image": "assets/images/b1.webp", "name": "Broiler"},
+      {"image": "assets/images/a1.webp", "name": "Deshi"},
+      {"image": "assets/images/anda.jpeg", "name": "Eggs"},
+      {"image": "assets/images/anda.jpeg", "name": "Hatching Eggs"},
       {"image": "assets/images/chick.png", "name": "Chicks"},
-      {"image": "assets/images/duck.png", "name": "Ducks"},
+      {"image": "assets/images/duck.jpg", "name": "Ducks"},
     ];
 
     return Scaffold(
@@ -122,7 +122,8 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                icon: const Icon(Icons.arrow_back_ios,
+                    color: Colors.white, size: 20),
                 onPressed: () => Navigator.pop(context),
               ),
             ),
@@ -172,7 +173,8 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFF667eea)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          const Color(0xFF667eea)),
                       strokeWidth: 3,
                     ),
                     const SizedBox(height: 16),
@@ -197,7 +199,10 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.red.withOpacity(0.1), Colors.pink.withOpacity(0.1)],
+                    colors: [
+                      Colors.red.withOpacity(0.1),
+                      Colors.pink.withOpacity(0.1)
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.red.withOpacity(0.3)),
@@ -220,7 +225,10 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                       '${snapshot.error}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onBackground
+                            .withOpacity(0.7),
                       ),
                     ),
                   ],
@@ -236,7 +244,10 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.orange.withOpacity(0.1), Colors.amber.withOpacity(0.1)],
+                    colors: [
+                      Colors.orange.withOpacity(0.1),
+                      Colors.amber.withOpacity(0.1)
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -271,14 +282,17 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                   opacity: _fadeAnimation.value,
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      double imageWidth = isDesktop ? constraints.maxWidth * 0.5 : double.infinity;
+                      double imageWidth = isDesktop
+                          ? constraints.maxWidth * 0.5
+                          : double.infinity;
                       double imageHeight = isDesktop ? 350 : 220;
 
                       return Column(
                         children: [
                           Expanded(
                             child: SingleChildScrollView(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 20),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
@@ -286,17 +300,21 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                   Transform.scale(
                                     scale: _scaleAnimation.value,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 20, vertical: 12),
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
                                           colors: [
-                                            const Color(0xFF667eea).withOpacity(0.1),
-                                            const Color(0xFF764ba2).withOpacity(0.1),
+                                            const Color(0xFF667eea)
+                                                .withOpacity(0.1),
+                                            const Color(0xFF764ba2)
+                                                .withOpacity(0.1),
                                           ],
                                         ),
                                         borderRadius: BorderRadius.circular(25),
                                         border: Border.all(
-                                          color: const Color(0xFF667eea).withOpacity(0.3),
+                                          color: const Color(0xFF667eea)
+                                              .withOpacity(0.3),
                                         ),
                                       ),
                                       child: Text(
@@ -305,13 +323,16 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                         style: TextStyle(
                                           fontSize: isDesktop ? 32 : 24,
                                           fontWeight: FontWeight.w800,
-                                          color: Theme.of(context).colorScheme.onBackground,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onBackground,
                                           letterSpacing: 0.5,
                                           shadows: [
                                             Shadow(
                                               offset: const Offset(1, 1),
                                               blurRadius: 3,
-                                              color: Colors.black.withOpacity(0.1),
+                                              color:
+                                                  Colors.black.withOpacity(0.1),
                                             ),
                                           ],
                                         ),
@@ -328,13 +349,16 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                         colors: [
-                                          const Color(0xFF667eea).withOpacity(0.2),
-                                          const Color(0xFF764ba2).withOpacity(0.2),
+                                          const Color(0xFF667eea)
+                                              .withOpacity(0.2),
+                                          const Color(0xFF764ba2)
+                                              .withOpacity(0.2),
                                         ],
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF667eea).withOpacity(0.3),
+                                          color: const Color(0xFF667eea)
+                                              .withOpacity(0.3),
                                           blurRadius: 25,
                                           offset: const Offset(0, 10),
                                           spreadRadius: 2,
@@ -360,34 +384,43 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                         child: SizedBox(
                                           width: imageWidth,
                                           height: imageHeight,
-                                          child: ad.imageUrl != null && ad.imageUrl!.isNotEmpty
+                                          child: ad.imageUrl != null &&
+                                                  ad.imageUrl!.isNotEmpty
                                               ? Image.network(
-                                            ad.imageUrl!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              final asset = sell.firstWhere(
-                                                    (element) =>
-                                                element['type']!.toLowerCase() ==
-                                                    ad.type.toLowerCase(),
-                                                orElse: () =>
-                                                {"image": "assets/images/broiler.png"},
-                                              )['image']!;
-                                              return Image.asset(
-                                                asset,
-                                                fit: BoxFit.cover,
-                                              );
-                                            },
-                                          )
+                                                  ad.imageUrl!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error,
+                                                      stackTrace) {
+                                                    final asset =
+                                                        sell.firstWhere(
+                                                      (element) =>
+                                                          element['type']!
+                                                              .toLowerCase() ==
+                                                          ad.type.toLowerCase(),
+                                                      orElse: () => {
+                                                        "image":
+                                                            "assets/images/broiler.png"
+                                                      },
+                                                    )['image']!;
+                                                    return Image.asset(
+                                                      asset,
+                                                      fit: BoxFit.cover,
+                                                    );
+                                                  },
+                                                )
                                               : Image.asset(
-                                            sell.firstWhere(
-                                                  (element) =>
-                                              element['name']!.toLowerCase() ==
-                                                  ad.type.toLowerCase(),
-                                              orElse: () =>
-                                              {"image": "assets/images/broiler.png"},
-                                            )['image']!,
-                                            fit: BoxFit.cover,
-                                          ),
+                                                  sell.firstWhere(
+                                                    (element) =>
+                                                        element['name']!
+                                                            .toLowerCase() ==
+                                                        ad.type.toLowerCase(),
+                                                    orElse: () => {
+                                                      "image":
+                                                          "assets/images/broiler.png"
+                                                    },
+                                                  )['image']!,
+                                                  fit: BoxFit.cover,
+                                                ),
                                         ),
                                       ),
                                     ),
@@ -403,12 +436,16 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                         end: Alignment.bottomRight,
                                         colors: [
                                           Theme.of(context).colorScheme.surface,
-                                          Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                                          Theme.of(context)
+                                              .colorScheme
+                                              .surface
+                                              .withOpacity(0.8),
                                         ],
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF667eea).withOpacity(0.2),
+                                          color: const Color(0xFF667eea)
+                                              .withOpacity(0.2),
                                           blurRadius: 20,
                                           offset: const Offset(0, 10),
                                           spreadRadius: 2,
@@ -420,27 +457,37 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                         ),
                                       ],
                                       border: Border.all(
-                                        color: const Color(0xFF667eea).withOpacity(0.2),
+                                        color: const Color(0xFF667eea)
+                                            .withOpacity(0.2),
                                         width: 1.5,
                                       ),
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.all(24),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           // Header with icon
                                           Row(
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets.all(8),
+                                                padding:
+                                                    const EdgeInsets.all(8),
                                                 decoration: BoxDecoration(
                                                   gradient: LinearGradient(
-                                                    colors: [const Color(0xFF667eea), const Color(0xFF764ba2)],
+                                                    colors: [
+                                                      const Color(0xFF667eea),
+                                                      const Color(0xFF764ba2)
+                                                    ],
                                                   ),
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
-                                                child: const Icon(Icons.info_outline, color: Colors.white, size: 20),
+                                                child: const Icon(
+                                                    Icons.info_outline,
+                                                    color: Colors.white,
+                                                    size: 20),
                                               ),
                                               const SizedBox(width: 12),
                                               Text(
@@ -448,59 +495,82 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                                 style: TextStyle(
                                                   fontSize: isDesktop ? 20 : 18,
                                                   fontWeight: FontWeight.w700,
-                                                  color: Theme.of(context).colorScheme.onBackground,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onBackground,
                                                 ),
                                               ),
                                             ],
                                           ),
                                           const SizedBox(height: 24),
-                                          
-                                          _buildEnhancedDetailRow("Type", ad.type, context, Icons.category),
+
+                                          _buildEnhancedDetailRow("Type",
+                                              ad.type, context, Icons.category),
                                           const SizedBox(height: 16),
-                                          _buildEnhancedDetailRow("Description", ad.description, context, Icons.description),
+                                          _buildEnhancedDetailRow(
+                                              "Description",
+                                              ad.description,
+                                              context,
+                                              Icons.description),
                                           const SizedBox(height: 16),
-                                          _buildEnhancedDetailRow("Quantity (unit)", ad.quantity.toString(), context, Icons.inventory),
+                                          _buildEnhancedDetailRow(
+                                              "Quantity (unit)",
+                                              ad.quantity.toString(),
+                                              context,
+                                              Icons.inventory),
                                           const SizedBox(height: 16),
-                                          _buildEnhancedDetailRow("Price (per unit)", "৳${ad.price}", context, Icons.attach_money),
+                                          _buildEnhancedDetailRow(
+                                              "Price (per unit)",
+                                              "৳${ad.price}",
+                                              context,
+                                              Icons.attach_money),
                                           const SizedBox(height: 16),
-                                          _buildEnhancedDetailRow("Location", "${ad.city}, ${ad.region}", context, Icons.location_on),
+                                          _buildEnhancedDetailRow(
+                                              "Location",
+                                              "${ad.city}, ${ad.region}",
+                                              context,
+                                              Icons.location_on),
                                           const SizedBox(height: 20),
-                                          
+
                                           // Rating and Activity Row with Enhanced Design
                                           Container(
                                             padding: const EdgeInsets.all(16),
                                             decoration: BoxDecoration(
                                               gradient: LinearGradient(
                                                 colors: [
-                                                  const Color(0xFF667eea).withOpacity(0.1),
-                                                  const Color(0xFF764ba2).withOpacity(0.1),
+                                                  const Color(0xFF667eea)
+                                                      .withOpacity(0.1),
+                                                  const Color(0xFF764ba2)
+                                                      .withOpacity(0.1),
                                                 ],
                                               ),
-                                              borderRadius: BorderRadius.circular(15),
+                                              borderRadius:
+                                                  BorderRadius.circular(15),
                                               border: Border.all(
-                                                color: const Color(0xFF667eea).withOpacity(0.2),
+                                                color: const Color(0xFF667eea)
+                                                    .withOpacity(0.2),
                                               ),
                                             ),
                                             child: Row(
                                               children: [
                                                 Expanded(
                                                   child: _buildMetricCard(
-                                                    "Seller Rating", 
-                                                    ad.sellerRating.toString(), 
-                                                    Icons.star, 
-                                                    Colors.amber,
-                                                    isDesktop
-                                                  ),
+                                                      "Seller Rating",
+                                                      ad.sellerRating
+                                                          .toString(),
+                                                      Icons.star,
+                                                      Colors.amber,
+                                                      isDesktop),
                                                 ),
                                                 const SizedBox(width: 16),
                                                 Expanded(
                                                   child: _buildMetricCard(
-                                                    "Activity", 
-                                                    ad.sellerActivity.toString(), 
-                                                    Icons.trending_up, 
-                                                    Colors.green,
-                                                    isDesktop
-                                                  ),
+                                                      "Activity",
+                                                      ad.sellerActivity
+                                                          .toString(),
+                                                      Icons.trending_up,
+                                                      Colors.green,
+                                                      isDesktop),
                                                 ),
                                               ],
                                             ),
@@ -523,7 +593,9 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  Theme.of(context).scaffoldBackgroundColor.withOpacity(0.0),
+                                  Theme.of(context)
+                                      .scaffoldBackgroundColor
+                                      .withOpacity(0.0),
                                   Theme.of(context).scaffoldBackgroundColor,
                                 ],
                               ),
@@ -534,7 +606,10 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                   child: _buildEnhancedButton(
                                     "Order Now",
                                     Icons.shopping_cart,
-                                    [const Color(0xFF11998e), const Color(0xFF38ef7d)],
+                                    [
+                                      const Color(0xFF11998e),
+                                      const Color(0xFF38ef7d)
+                                    ],
                                     () {
                                       NextScreen(
                                         context,
@@ -553,7 +628,10 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                                   child: _buildEnhancedButton(
                                     "Call Seller",
                                     Icons.phone,
-                                    [const Color(0xFF667eea), const Color(0xFF764ba2)],
+                                    [
+                                      const Color(0xFF667eea),
+                                      const Color(0xFF764ba2)
+                                    ],
                                     () {},
                                     isDesktop,
                                   ),
@@ -574,7 +652,8 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildEnhancedDetailRow(String title, String value, BuildContext context, IconData icon) {
+  Widget _buildEnhancedDetailRow(
+      String title, String value, BuildContext context, IconData icon) {
     final isDesktop = ResponsiveHelper.isDesktop(context);
     return Container(
       padding: const EdgeInsets.all(16),
@@ -616,7 +695,10 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
                   value,
                   style: TextStyle(
                     fontSize: isDesktop ? 15 : 13,
-                    color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onBackground
+                        .withOpacity(0.7),
                     height: 1.4,
                   ),
                 ),
@@ -628,7 +710,8 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color, bool isDesktop) {
+  Widget _buildMetricCard(
+      String title, String value, IconData icon, Color color, bool isDesktop) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -653,7 +736,8 @@ class _MyAdsPageState extends State<MyAdsPage> with TickerProviderStateMixin {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: isDesktop ? 12 : 11,
-              color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+              color:
+                  Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
             ),
           ),
         ],

@@ -6,12 +6,12 @@ import 'package:poultry_app/widgets/navigation.dart';
 import '../Responsive_helper.dart';
 
 List<Map<String, String>> sell = [
-  {"image": "assets/images/birds.png", "name": "Broiler"},
-  {"image": "assets/images/deshi.png", "name": "Deshi"},
-  {"image": "assets/images/egg.png", "name": "Eggs"},
-  {"image": "assets/images/eggs.png", "name": "Hatching Eggs"},
+  {"image": "assets/images/b1.webp", "name": "Broiler"},
+  {"image": "assets/images/a1.webp", "name": "Deshi"},
+  {"image": "assets/images/anda.jpeg", "name": "Eggs"},
+  {"image": "assets/images/anda.jpeg", "name": "Hatching Eggs"},
   {"image": "assets/images/chick.png", "name": "Chicks"},
-  {"image": "assets/images/duck.png", "name": "Ducks"},
+  {"image": "assets/images/duck.jpg", "name": "Ducks"},
 ];
 
 class RecommendationWidget extends StatefulWidget {
@@ -219,15 +219,16 @@ class _RecommendationWidgetState extends State<RecommendationWidget>
                   itemBuilder: (context, index) {
                     final data = docs[index].data() as Map<String, dynamic>;
                     final type = data['type'] ?? '';
-                    final imageAsset = data['imageUrl'] != null &&
-                            data['imageUrl'] != ''
-                        ? null
-                        : getAssetForType(type);
+                    final imageAsset =
+                        data['imageUrl'] != null && data['imageUrl'] != ''
+                            ? null
+                            : getAssetForType(type);
 
                     return AnimatedBuilder(
                       animation: _cardControllers[index],
                       builder: (context, child) {
-                        final scaleValue = 1.0 + (_cardControllers[index].value * 0.05);
+                        final scaleValue =
+                            1.0 + (_cardControllers[index].value * 0.05);
                         return Transform.scale(
                           scale: scaleValue,
                           child: _buildProductCard(
